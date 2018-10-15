@@ -112,13 +112,16 @@ func postRestfulQuery(
 	requestID := uuid.New().String()
 	data, err = sr.FuncPostQueryHelper(ctx, sr, params, headers, body, timeout, requestID)
 
-	// TODO this should not block the caller
-	if err := sr.FuncCancelQuery(context.Background(), sr, requestID); err != nil {
-		glog.V(2).Infof("failed to cancel query %s. err: %v", requestID, err)
-		return nil, err
+	if err != context.Canceled && err != context.DeadlineExceeded {
+		return data, err
 	}
 
-	return data, err
+	// TODO this should not block the caller
+	err = sr.FuncCancelQuery(context.TODO(), sr, requestID)
+	if err != nil {
+		return nil, err
+	}
+	return nil, ctx.Err()
 }
 
 func postRestfulQueryHelper(
@@ -231,7 +234,7 @@ func closeSession(
 	headers["User-Agent"] = userAgent
 	headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, sr.Token)
 
-	resp, err := sr.FuncPost(ctx, sr, fullURL, headers, nil, sr.RequestTimeout, false)
+	resp, err := sr.FuncPost(ctx, sr, fullURL, headers, nil, 5*time.Second, false)
 	if err != nil {
 		return err
 	}
