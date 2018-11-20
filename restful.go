@@ -181,9 +181,10 @@ func postRestfulQueryHelper(
 
 			resp, err = sr.FuncGet(ctx, sr, fullURL, headers, timeout)
 			if err != nil {
+				glog.V(1).Infof("failed to get response. err: %v", err)
+				glog.Flush()
 				return nil, err
 			}
-
 			respd = execResponse{} // reset the response
 			err = json.NewDecoder(resp.Body).Decode(&respd)
 			resp.Body.Close()
