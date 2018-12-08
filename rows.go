@@ -34,9 +34,22 @@ var (
 )
 
 type snowflakeRows struct {
-	sc              *snowflakeConn
-	RowType         []execResponseRowType
-	ChunkDownloader *snowflakeChunkDownloader
+	sc                   *snowflakeConn
+	RowType              []execResponseRowType
+	ChunkDownloader      *snowflakeChunkDownloader
+	Total                *int64
+	QueryID              *string
+	SQLState             *string
+	DatabaseProvider     *string
+	FinalDatabaseName    *string
+	FinalSchemaName      *string
+	FinalWarehouseName   *string
+	FinalRoleName        *string
+	NumberOfBinds        *int
+	StatementTypeID      *int64
+	Version              *int64
+	GetResultURL         *string
+	QueryAbortsAfterSecs *time.Duration
 }
 
 func (rows *snowflakeRows) Close() (err error) {

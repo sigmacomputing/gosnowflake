@@ -244,6 +244,19 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 	rows := new(snowflakeRows)
 	rows.sc = sc
 	rows.RowType = data.Data.RowType
+	rows.Total = &data.Data.Total
+	rows.QueryID = &data.Data.QueryID
+	rows.SQLState = &data.Data.SQLState
+	rows.DatabaseProvider = &data.Data.DatabaseProvider
+	rows.FinalDatabaseName = &data.Data.FinalDatabaseName
+	rows.FinalSchemaName = &data.Data.FinalSchemaName
+	rows.FinalWarehouseName = &data.Data.FinalWarehouseName
+	rows.FinalRoleName = &data.Data.FinalRoleName
+	rows.NumberOfBinds = &data.Data.NumberOfBinds
+	rows.StatementTypeID = &data.Data.StatementTypeID
+	rows.Version = &data.Data.Version
+	rows.GetResultURL = &data.Data.GetResultURL
+	rows.QueryAbortsAfterSecs = &data.Data.QueryAbortsAfterSecs
 	rows.ChunkDownloader = &snowflakeChunkDownloader{
 		sc:                 sc,
 		ctx:                ctx,
