@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2018 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2019 Snowflake Computing Inc. All right reserved.
 // +build go1.10
 
 package gosnowflake
