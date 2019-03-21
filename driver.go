@@ -20,7 +20,7 @@ func (d SnowflakeDriver) Open(dsn string) (driver.Conn, error) {
 
 	var err error
 	sc := &snowflakeConn{
-		SequeceCounter: 0,
+		SequenceCounter: 0,
 	}
 	sc.cfg, err = ParseDSN(dsn)
 	if err != nil {
