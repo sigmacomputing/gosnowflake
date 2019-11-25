@@ -206,8 +206,7 @@ func postAuthCheckJWTToken(_ context.Context, _ *snowflakeRestful, _ *url.Values
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
 
-		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
-		return testPrivKey, nil
+		return testPrivKey.Public(), nil
 	})
 	if err != nil {
 		return nil, err
