@@ -398,7 +398,60 @@ func downloadChunkHelper(ctx context.Context, scd *snowflakeChunkDownloader, idx
 	bufStream := bufio.NewReader(resp.Body)
 	defer resp.Body.Close()
 	glog.V(2).Infof("response returned chunk: %v, resp: %v", idx+1, resp)
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode == http.StatusOK {
+		gzipMagic, err := bufStream.Peek(2)
+		if err != nil {
+			raiseDownloadError(scd, idx, err)
+			return
+		}
+		start := time.Now()
+		var source io.Reader
+		if gzipMagic[0] == 0x1f && gzipMagic[1] == 0x8b {
+			// detects and uncompresses Gzip format data
+			bufStream0, err := gzip.NewReader(bufStream)
+			if err != nil {
+				raiseDownloadError(scd, idx, err)
+				return
+			}
+			defer bufStream0.Close()
+			source = bufStream0
+		} else {
+			source = bufStream
+		}
+		st := &largeResultSetReader{
+			status: 0,
+			body:   source,
+		}
+		var respd [][]*string
+		if !CustomJSONDecoderEnabled {
+			dec := json.NewDecoder(st)
+			for {
+				if err := dec.Decode(&respd); err == io.EOF {
+					break
+				} else if err != nil {
+					raiseDownloadError(scd, idx, err)
+					return
+				}
+			}
+		} else {
+			respd, err = decodeLargeChunk(st, scd.ChunkMetas[idx].RowCount, scd.CellCount)
+			if err != nil {
+				raiseDownloadError(scd, idx, err)
+				return
+			}
+		}
+		glog.V(2).Infof(
+			"decoded %d rows w/ %d bytes in %s (chunk %v)",
+			scd.ChunkMetas[idx].RowCount,
+			scd.ChunkMetas[idx].UncompressedSize,
+			time.Since(start), idx+1,
+		)
+
+		scd.ChunksMutex.Lock()
+		defer scd.ChunksMutex.Unlock()
+		scd.Chunks[idx] = respd
+		scd.DoneDownloadCond.Broadcast()
+	} else {
 		b, err := ioutil.ReadAll(bufStream)
 		if err != nil {
 			return err
