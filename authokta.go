@@ -218,7 +218,6 @@ func postAuthSAML(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
-		glog.V(2).Infof("postAuthSAML: resp: %v", resp)
 		var respd authResponse
 		err = json.NewDecoder(resp.Body).Decode(&respd)
 		if err != nil {
@@ -280,7 +279,6 @@ func postAuthOKTA(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
-		glog.V(2).Infof("postAuthOKTA: resp: %v", resp)
 		var respd authOKTAResponse
 		err = json.NewDecoder(resp.Body).Decode(&respd)
 		if err != nil {
@@ -296,7 +294,7 @@ func postAuthOKTA(
 		glog.Flush()
 		return nil, err
 	}
-	glog.V(1).Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, fullURL, b)
+	glog.V(1).Infof("HTTP: %v, URL: %v", resp.StatusCode, fullURL)
 	glog.V(1).Infof("Header: %v", resp.Header)
 	glog.Flush()
 	return nil, &SnowflakeError{
@@ -333,10 +331,9 @@ func getSSO(
 		return nil, err
 	}
 	if resp.StatusCode == http.StatusOK {
-		glog.V(2).Infof("getSSO: resp: %v", resp)
 		return b, nil
 	}
-	glog.V(1).Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, fullURL, b)
+	glog.V(1).Infof("HTTP: %v, URL: %v ", resp.StatusCode, fullURL)
 	glog.V(1).Infof("Header: %v", resp.Header)
 	glog.Flush()
 	return nil, &SnowflakeError{
