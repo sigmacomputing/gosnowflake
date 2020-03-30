@@ -129,7 +129,6 @@ func rowTypesToColumnTypes(rows []execResponseRowType) []ColumnType {
 	glog.V(3).Infoln("Rows.Columns")
 	ret := make([]ColumnType, len(rows))
 	for i, rt := range rows {
-		rt := rows[i]
 		ret[i] = ColumnType{
 			Name:     rt.Name,
 			Type:     strings.ToUpper(rt.Type),
