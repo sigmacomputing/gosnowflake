@@ -128,7 +128,7 @@ func (rows *snowflakeRows) Columns() []string {
 func rowTypesToColumnTypes(rows []execResponseRowType) []ColumnType {
 	glog.V(3).Infoln("Rows.Columns")
 	ret := make([]ColumnType, len(rows))
-	for i, n := 0, len(rows); i < n; i++ {
+	for i, rt := range rows {
 		rt := rows[i]
 		ret[i] = ColumnType{
 			Name:     rt.Name,
