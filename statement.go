@@ -24,6 +24,8 @@ func (stmt *SnowflakeStmt) NumInput() int {
 	return -1
 }
 
+// NOTE this function isn't actually part of any of the `database/sql` interfaces. As such the SnowflakeStmt
+// struct must be public so that calling code can typecast and call the function.
 func (stmt *SnowflakeStmt) DescribeContext(ctx context.Context, args ...driver.NamedValue) ([]ColumnType, error) {
 	glog.V(2).Infoln("Stmt.DescribeContext")
 	return stmt.sc.DescribeContext(ctx, stmt.query, args)
