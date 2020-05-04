@@ -386,7 +386,6 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 			RowSetBase64: data.Data.RowSetBase64,
 		},
 	}
-	//populateJSONRowSet(rows.ChunkDownloader.CurrentChunk, data.Data.RowSet)
 	rows.ChunkDownloader.start()
 	return rows, nil
 }
