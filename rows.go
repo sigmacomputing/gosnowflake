@@ -494,7 +494,6 @@ func downloadChunkHelper(ctx context.Context, scd *snowflakeChunkDownloader, idx
 				memory.NewGoAllocator(),
 			}
 			respd, err = arc.decodeArrowChunk(scd.RowSet.RowType)
-			scd.CurrentChunkSize = arc.rowCount
 			if err != nil {
 				return
 			}
