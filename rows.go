@@ -102,6 +102,7 @@ type snowflakeChunkDownloader struct {
 	FuncDownloadHelper func(context.Context, *snowflakeChunkDownloader, int) error
 	FuncGet            func(context.Context, *snowflakeChunkDownloader, string, map[string]string, time.Duration) (*http.Response, error)
 	DoneDownloadCond   *sync.Cond
+	NextDownloader     *snowflakeChunkDownloader
 }
 
 // ColumnTypeDatabaseTypeName returns the database column name.
@@ -205,7 +206,7 @@ func (rows *snowflakeRows) Next(dest []driver.Value) (err error) {
 }
 
 func (rows *snowflakeRows) HasNextResultSet() bool {
-	if len(rows.ChunkDownloader.ChunkMetas) == 0 {
+	if len(rows.ChunkDownloader.ChunkMetas) == 0 && rows.ChunkDownloader.NextDownloader == nil {
 		return false // no extra chunk
 	}
 	return rows.ChunkDownloader.hasNextResultSet()
@@ -213,7 +214,11 @@ func (rows *snowflakeRows) HasNextResultSet() bool {
 
 func (rows *snowflakeRows) NextResultSet() error {
 	if len(rows.ChunkDownloader.ChunkMetas) == 0 {
-		return io.EOF
+		if rows.ChunkDownloader.NextDownloader == nil {
+			return io.EOF
+		}
+		rows.ChunkDownloader = rows.ChunkDownloader.NextDownloader
+		rows.ChunkDownloader.start()
 	}
 	return rows.ChunkDownloader.nextResultSet()
 }
@@ -226,7 +231,8 @@ func (scd *snowflakeChunkDownloader) totalUncompressedSize() (acc int64) {
 }
 
 func (scd *snowflakeChunkDownloader) hasNextResultSet() bool {
-	return scd.CurrentChunkIndex < len(scd.ChunkMetas)
+	// next result set exists if current chunk has remaining result sets or there is another downloader
+	return scd.CurrentChunkIndex < len(scd.ChunkMetas) || scd.NextDownloader != nil
 }
 
 func (scd *snowflakeChunkDownloader) nextResultSet() error {

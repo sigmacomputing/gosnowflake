@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"net/url"
 	"strconv"
@@ -16,6 +17,8 @@ import (
 )
 
 const (
+	statementTypeIDMulti = int64(0x1000)
+
 	statementTypeIDDml              = int64(0x3000)
 	statementTypeIDInsert           = statementTypeIDDml + int64(0x100)
 	statementTypeIDUpdate           = statementTypeIDDml + int64(0x200)
@@ -64,14 +67,15 @@ func (sc *snowflakeConn) isDml(v int64) bool {
 	return false
 }
 
+// isMultiStmt returns true if the statement type code is of type multistatement
+// Note that the statement type code is also equivalent to type INSERT, so an additional check of the name is required
+func (sc *snowflakeConn) isMultiStmt(data execResponseData) bool {
+	return data.StatementTypeID == statementTypeIDMulti && data.RowType[0].Name == "multiple statement execution"
+}
+
 func (sc *snowflakeConn) exec(
 	ctx context.Context,
-	query string,
-	noResult bool,
-	isInternal bool,
-	describeOnly bool,
-	parameters []driver.NamedValue,
-) (*execResponse, error) {
+	query string, noResult bool, isInternal bool, bindings []driver.NamedValue) (*execResponse, error) {
 	var err error
 	counter := atomic.AddUint64(&sc.SequenceCounter, 1) // query sequence counter
 
@@ -91,18 +95,18 @@ func (sc *snowflakeConn) exec(
 	}
 	tsmode := "TIMESTAMP_NTZ"
 	idx := 1
-	if len(parameters) > 0 {
-		req.Bindings = make(map[string]execBindParameter, len(parameters))
-		for i, n := 0, len(parameters); i < n; i++ {
-			t := goTypeToSnowflake(parameters[i].Value, tsmode)
+	if len(bindings) > 0 {
+		req.Bindings = make(map[string]execBindParameter, len(bindings))
+		for i, n := 0, len(bindings); i < n; i++ {
+			t := goTypeToSnowflake(bindings[i].Value, tsmode)
 			glog.V(2).Infof("tmode: %v\n", t)
 			if t == "CHANGE_TYPE" {
-				tsmode, err = dataTypeMode(parameters[i].Value)
+				tsmode, err = dataTypeMode(bindings[i].Value)
 				if err != nil {
 					return nil, err
 				}
 			} else {
-				v1, err := valueToString(parameters[i].Value, tsmode)
+				v1, err := valueToString(bindings[i].Value, tsmode)
 				if err != nil {
 					return nil, err
 				}
@@ -114,7 +118,12 @@ func (sc *snowflakeConn) exec(
 			}
 		}
 	}
+	multiCount := ctx.Value(MultiStatementCount)
+	if multiCount != nil {
+		req.Parameters = map[string]interface{}{string(MultiStatementCount): multiCount}
+	}
 	glog.V(2).Infof("bindings: %v", req.Bindings)
+	glog.V(2).Infof("parameters: %v", req.Parameters)
 
 	headers := make(map[string]string)
 	headers["Content-Type"] = headerContentTypeApplicationJSON
@@ -309,28 +318,37 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 	if err != nil {
 		return nil, err
 	}
-	var updatedRows int64
+	var updatedRows int64 = 0
 	if sc.isDml(data.Data.StatementTypeID) {
 		// collects all values from the returned row sets
-		updatedRows = 0
-		for i, n := 0, len(data.Data.RowType); i < n; i++ {
-			v, err := strconv.ParseInt(*data.Data.RowSet[0][i], 10, 64)
+		updatedRows, err = updateRows(data.Data)
+		if err != nil {
+			return nil, err
+		}
+		glog.V(2).Infof("number of updated rows: %#v", updatedRows)
+		return &snowflakeResult{
+			affectedRows: updatedRows,
+			insertID:     -1}, nil // last insert id is not supported by Snowflake
+	} else if sc.isMultiStmt(data.Data) {
+		childResults := getChildResults(data.Data.ResultIDs, data.Data.ResultTypes)
+		for _, child := range childResults {
+			resultPath := fmt.Sprintf("/queries/%s/result", child.id)
+			childData, err := sc.getQueryResult(ctx, resultPath)
 			if err != nil {
 				return nil, err
 			}
-			updatedRows += v
+			if sc.isDml(childData.Data.StatementTypeID) {
+				count, err := updateRows(childData.Data)
+				if err != nil {
+					return nil, err
+				}
+				updatedRows += count
+			}
 		}
 		glog.V(2).Infof("number of updated rows: %#v", updatedRows)
 		rows := &snowflakeResult{
 			affectedRows: updatedRows,
-			insertID:     -1,
-			queryID:      sc.QueryID,
-		}
-
-		if m, err := sc.monitoring(sc.QueryID, time.Since(qStart)); err == nil {
-			rows.monitoring = m
-		}
-		return rows, nil
+			insertID:     -1}, nil
 	}
 	glog.V(2).Info("DDL")
 	return driver.ResultNoRows, nil
@@ -386,6 +404,30 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 			RowSetBase64: data.Data.RowSetBase64,
 		},
 	}
+
+	if sc.isMultiStmt(data.Data) {
+		childResults := getChildResults(data.Data.ResultIDs, data.Data.ResultTypes)
+		var nextChunkDownloader *snowflakeChunkDownloader
+		firstResultSet := false
+
+		for _, child := range childResults {
+			resultPath := fmt.Sprintf("/queries/%s/result", child.id)
+			childData, err := sc.getQueryResult(ctx, resultPath)
+			if err != nil {
+				return nil, err
+			}
+			if !firstResultSet {
+				// populate rows.ChunkDownloader with the first child
+				rows.ChunkDownloader = populateChunkDownloader(ctx, sc, childData.Data)
+				nextChunkDownloader = rows.ChunkDownloader
+				firstResultSet = true
+			} else {
+				nextChunkDownloader.NextDownloader = populateChunkDownloader(ctx, sc, childData.Data)
+				nextChunkDownloader = nextChunkDownloader.NextDownloader
+			}
+		}
+	}
+
 	rows.ChunkDownloader.start()
 	return rows, nil
 }
@@ -465,4 +507,88 @@ func (sc *snowflakeConn) stopHeartBeat() {
 		return
 	}
 	sc.rest.HeartBeat.stop()
+}
+
+func updateRows(data execResponseData) (int64, error) {
+	var count int64 = 0
+	for i, n := 0, len(data.RowType); i < n; i++ {
+		v, err := strconv.ParseInt(*data.RowSet[0][i], 10, 64)
+		if err != nil {
+			return -1, err
+		}
+		count += v
+	}
+	return count, nil
+}
+
+type childResult struct {
+	id  string
+	typ string
+}
+
+func getChildResults(IDs string, types string) []childResult {
+	if IDs == "" {
+		return nil
+	}
+	queryIDs := strings.Split(IDs, ",")
+	resultTypes := strings.Split(types, ",")
+	res := make([]childResult, len(queryIDs))
+	for i, id := range queryIDs {
+		res[i] = childResult{id, resultTypes[i]}
+	}
+	return res
+}
+
+func (sc *snowflakeConn) getQueryResult(ctx context.Context, resultPath string) (execResponse, error) {
+	headers := make(map[string]string)
+	headers["Content-Type"] = headerContentTypeApplicationJSON
+	headers["accept"] = headerAcceptTypeApplicationSnowflake
+	headers["User-Agent"] = userAgent
+	if serviceName, ok := sc.cfg.Params[serviceName]; ok {
+		headers["X-Snowflake-Service"] = *serviceName
+	}
+	param := make(url.Values)
+	param.Add(requestIDKey, uuid.New().String())
+	param.Add("clientStartTime", strconv.FormatInt(time.Now().Unix(), 10))
+	param.Add(requestGUIDKey, uuid.New().String())
+	if sc.rest.Token != "" {
+		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, sc.rest.Token)
+	}
+	url := sc.rest.getFullURL(resultPath, &param)
+	res, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
+	if err != nil {
+		glog.V(1).Infof("failed to get response. err: %v", err)
+		glog.Flush()
+		return execResponse{}, err
+	}
+	var respd execResponse
+	err = json.NewDecoder(res.Body).Decode(&respd)
+	if err != nil {
+		glog.V(1).Infof("failed to decode JSON. err: %v", err)
+		glog.Flush()
+		return execResponse{}, err
+	}
+	return respd, nil
+}
+
+func populateChunkDownloader(ctx context.Context, sc *snowflakeConn, data execResponseData) *snowflakeChunkDownloader {
+	return &snowflakeChunkDownloader{
+		sc:                 sc,
+		ctx:                ctx,
+		CurrentChunk:       make([]chunkRowType, len(data.RowSet)),
+		ChunkMetas:         data.Chunks,
+		Total:              data.Total,
+		TotalRowIndex:      int64(-1),
+		CellCount:          len(data.RowType),
+		Qrmk:               data.Qrmk,
+		QueryResultFormat:  data.QueryResultFormat,
+		ChunkHeader:        data.ChunkHeaders,
+		FuncDownload:       downloadChunk,
+		FuncDownloadHelper: downloadChunkHelper,
+		FuncGet:            getChunk,
+		RowSet: rowSetType{RowType: data.RowType,
+			JSON:         data.RowSet,
+			RowSetBase64: data.RowSetBase64,
+		},
+	}
 }
