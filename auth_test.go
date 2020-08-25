@@ -3,6 +3,7 @@
 package gosnowflake
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
@@ -379,7 +380,7 @@ func TestUnitAuthenticateJWT(t *testing.T) {
 	sc.rest = sr
 
 	// A valid JWT token should pass
-	_, err = authenticate(sc, []byte{}, []byte{})
+	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
 	if err != nil {
 		t.Fatalf("failed to run. err: %v", err)
 	}
@@ -387,7 +388,7 @@ func TestUnitAuthenticateJWT(t *testing.T) {
 	// An invalid JWT token should not pass
 	invalidPrivateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	sc.cfg.PrivateKey = invalidPrivateKey
-	_, err = authenticate(sc, []byte{}, []byte{})
+	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
 	if err == nil {
 		t.Fatalf("invalid token passed")
 	}

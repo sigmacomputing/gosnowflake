@@ -213,25 +213,25 @@ func TestUnitCancelQuery(t *testing.T) {
 	}
 	var requestID uuid.UUID
 	requestID = uuid.New()
-	err := cancelQuery(sr, &requestID)
+	err := cancelQuery(context.Background(), sr, &requestID, time.Second)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 	sr.FuncPost = postTestError
 	requestID = uuid.New()
-	err = cancelQuery(sr, &requestID)
+	err = cancelQuery(context.Background(), sr, &requestID, time.Second)
 	if err == nil {
 		t.Fatal("should have failed to close session")
 	}
 	sr.FuncPost = postTestAppBadGatewayError
 	requestID = uuid.New()
-	err = cancelQuery(sr, &requestID)
+	err = cancelQuery(context.Background(), sr, &requestID, time.Second)
 	if err == nil {
 		t.Fatal("should have failed to close session")
 	}
 	sr.FuncPost = postTestSuccessButInvalidJSON
 	requestID = uuid.New()
-	err = cancelQuery(sr, &requestID)
+	err = cancelQuery(context.Background(), sr, &requestID, time.Second)
 	if err == nil {
 		t.Fatal("should have failed to close session")
 	}

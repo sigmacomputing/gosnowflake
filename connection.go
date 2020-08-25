@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2019 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2020 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
@@ -75,7 +75,11 @@ func (sc *snowflakeConn) isMultiStmt(data execResponseData) bool {
 
 func (sc *snowflakeConn) exec(
 	ctx context.Context,
-	query string, noResult bool, isInternal bool, bindings []driver.NamedValue) (*execResponse, error) {
+	query string,
+	noResult bool,
+	isInternal bool,
+	bindings []driver.NamedValue) (
+	*execResponse, error) {
 	var err error
 	counter := atomic.AddUint64(&sc.SequenceCounter, 1) // query sequence counter
 
@@ -143,14 +147,14 @@ func (sc *snowflakeConn) exec(
 	requestID := uuid.New()
 	data, err = sc.rest.FuncPostQuery(ctx, sc.rest, &url.Values{}, headers, jsonBody, sc.rest.RequestTimeout, &requestID)
 	if err != nil {
-		return nil, err
+		return data, err
 	}
 	var code int
 	if data.Code != "" {
 		code, err = strconv.Atoi(data.Code)
 		if err != nil {
 			code = -1
-			return nil, err
+			return data, err
 		}
 	} else {
 		code = -1
@@ -263,31 +267,11 @@ func (sc *snowflakeConn) Close() (err error) {
 	glog.V(2).Infoln("Close")
 	sc.stopHeartBeat()
 
-	err = sc.rest.FuncCloseSession(sc.rest)
+	err = sc.rest.FuncCloseSession(context.TODO(), sc.rest, sc.rest.RequestTimeout)
 	if err != nil {
 		glog.V(2).Info(err)
 	}
 	sc.cleanup()
-	return nil
-}
-
-func WithContextStatementParameters(ctx context.Context, params map[string]string) context.Context {
-	glog.V(2).Infoln("Adding parameters")
-	existingParams := GetContextStatementParameters(ctx)
-	if existingParams != nil {
-		for k, v := range params {
-			existingParams[k] = v
-		}
-		params = existingParams
-	}
-	return context.WithValue(ctx, paramsKey, params)
-}
-
-func GetContextStatementParameters(ctx context.Context) map[string]string {
-	glog.V(2).Infoln("Retrieving parameters")
-	if params, ok := ctx.Value(paramsKey).(map[string]string); ok {
-		return params
-	}
 	return nil
 }
 
@@ -316,8 +300,21 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 	qStart := time.Now()
 	data, err := sc.exec(ctx, query, false, false, false, args)
 	if err != nil {
+		glog.V(2).Infof("error: %v", err)
+		if data != nil {
+			code, err := strconv.Atoi(data.Code)
+			if err != nil {
+				return nil, err
+			}
+			return nil, &SnowflakeError{
+				Number:   code,
+				SQLState: data.Data.SQLState,
+				Message:  err.Error(),
+				QueryID:  data.Data.QueryID}
+		}
 		return nil, err
 	}
+
 	var updatedRows int64 = 0
 	if sc.isDml(data.Data.StatementTypeID) {
 		// collects all values from the returned row sets
@@ -328,18 +325,44 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 		glog.V(2).Infof("number of updated rows: %#v", updatedRows)
 		return &snowflakeResult{
 			affectedRows: updatedRows,
-			insertID:     -1}, nil // last insert id is not supported by Snowflake
+			insertID:     -1,
+			queryID:      sc.QueryID,
+		}, nil // last insert id is not supported by Snowflake
 	} else if sc.isMultiStmt(data.Data) {
 		childResults := getChildResults(data.Data.ResultIDs, data.Data.ResultTypes)
 		for _, child := range childResults {
 			resultPath := fmt.Sprintf("/queries/%s/result", child.id)
 			childData, err := sc.getQueryResult(ctx, resultPath)
 			if err != nil {
+				glog.V(2).Infof("error: %v", err)
+				code, err := strconv.Atoi(childData.Code)
+				if err != nil {
+					return nil, err
+				}
+				if childData != nil {
+					return nil, &SnowflakeError{
+						Number:   code,
+						SQLState: childData.Data.SQLState,
+						Message:  err.Error(),
+						QueryID:  childData.Data.QueryID}
+				}
 				return nil, err
 			}
 			if sc.isDml(childData.Data.StatementTypeID) {
 				count, err := updateRows(childData.Data)
 				if err != nil {
+					glog.V(2).Infof("error: %v", err)
+					if childData != nil {
+						code, err := strconv.Atoi(childData.Code)
+						if err != nil {
+							return nil, err
+						}
+						return nil, &SnowflakeError{
+							Number:   code,
+							SQLState: childData.Data.SQLState,
+							Message:  err.Error(),
+							QueryID:  childData.Data.QueryID}
+					}
 					return nil, err
 				}
 				updatedRows += count
@@ -348,7 +371,9 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 		glog.V(2).Infof("number of updated rows: %#v", updatedRows)
 		rows := &snowflakeResult{
 			affectedRows: updatedRows,
-			insertID:     -1}, nil
+			insertID:     -1,
+			queryID:      sc.QueryID,
+		}, nil
 	}
 	glog.V(2).Info("DDL")
 	return driver.ResultNoRows, nil
@@ -379,6 +404,17 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 	data, err := sc.exec(ctx, query, false, false, false, args)
 	if err != nil {
 		glog.V(2).Infof("error: %v", err)
+		if data != nil {
+			code, err := strconv.Atoi(data.Code)
+			if err != nil {
+				return nil, err
+			}
+			return nil, &SnowflakeError{
+				Number:   code,
+				SQLState: data.Data.SQLState,
+				Message:  err.Error(),
+				QueryID:  data.Data.QueryID}
+		}
 		return nil, err
 	}
 
@@ -404,6 +440,7 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 			RowSetBase64: data.Data.RowSetBase64,
 		},
 	}
+	rows.queryID = sc.QueryID
 
 	if sc.isMultiStmt(data.Data) {
 		childResults := getChildResults(data.Data.ResultIDs, data.Data.ResultTypes)
@@ -414,6 +451,18 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 			resultPath := fmt.Sprintf("/queries/%s/result", child.id)
 			childData, err := sc.getQueryResult(ctx, resultPath)
 			if err != nil {
+				glog.V(2).Infof("error: %v", err)
+				if childData != nil {
+					code, err := strconv.Atoi(childData.Code)
+					if err != nil {
+						return nil, err
+					}
+					return nil, &SnowflakeError{
+						Number:   code,
+						SQLState: childData.Data.SQLState,
+						Message:  err.Error(),
+						QueryID:  childData.Data.QueryID}
+				}
 				return nil, err
 			}
 			if !firstResultSet {
@@ -539,7 +588,7 @@ func getChildResults(IDs string, types string) []childResult {
 	return res
 }
 
-func (sc *snowflakeConn) getQueryResult(ctx context.Context, resultPath string) (execResponse, error) {
+func (sc *snowflakeConn) getQueryResult(ctx context.Context, resultPath string) (*execResponse, error) {
 	headers := make(map[string]string)
 	headers["Content-Type"] = headerContentTypeApplicationJSON
 	headers["accept"] = headerAcceptTypeApplicationSnowflake
@@ -559,14 +608,14 @@ func (sc *snowflakeConn) getQueryResult(ctx context.Context, resultPath string) 
 	if err != nil {
 		glog.V(1).Infof("failed to get response. err: %v", err)
 		glog.Flush()
-		return execResponse{}, err
+		return nil, err
 	}
-	var respd execResponse
+	var respd *execResponse
 	err = json.NewDecoder(res.Body).Decode(&respd)
 	if err != nil {
 		glog.V(1).Infof("failed to decode JSON. err: %v", err)
 		glog.Flush()
-		return execResponse{}, err
+		return nil, err
 	}
 	return respd, nil
 }

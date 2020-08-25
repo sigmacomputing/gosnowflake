@@ -21,6 +21,7 @@ func (d SnowflakeDriver) Open(dsn string) (driver.Conn, error) {
 	sc := &snowflakeConn{
 		SequenceCounter: 0,
 	}
+	ctx := context.TODO()
 	sc.cfg, err = ParseDSN(dsn)
 	if err != nil {
 		sc.cleanup()

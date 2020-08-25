@@ -273,7 +273,7 @@ func postAuthOKTA(
 	if err != nil {
 		return nil, err
 	}
-	resp, err := sr.FuncPost(context.TODO(), sr, targetURL, headers, body, timeout, false)
+	resp, err := sr.FuncPost(ctx, sr, targetURL, headers, body, timeout, false)
 	if err != nil {
 		return nil, err
 	}
