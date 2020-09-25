@@ -35,6 +35,7 @@ var (
 	maxChunkDownloaderErrorCounter = 5
 )
 
+// ColumnType TODO
 type ColumnType struct {
 	Name     string
 	Type     string
