@@ -104,7 +104,7 @@ func (sc *snowflakeConn) exec(
 		req.Bindings = make(map[string]execBindParameter, len(bindings))
 		for i, n := 0, len(bindings); i < n; i++ {
 			t := goTypeToSnowflake(bindings[i].Value, tsmode)
-			glog.V(2).Infof("tmode: %v\n", t)
+			logger.Infof("tmode: %v\n", t)
 			if t == "CHANGE_TYPE" {
 				tsmode, err = dataTypeMode(bindings[i].Value)
 				if err != nil {
@@ -132,8 +132,8 @@ func (sc *snowflakeConn) exec(
 	if multiCount != nil {
 		req.Parameters = map[string]interface{}{string(MultiStatementCount): multiCount}
 	}
-	glog.V(2).Infof("bindings: %v", req.Bindings)
-	glog.V(2).Infof("parameters: %v", req.Parameters)
+	logger.Infof("bindings: %v", req.Bindings)
+	logger.Infof("parameters: %v", req.Parameters)
 
 	headers := make(map[string]string)
 	headers["Content-Type"] = headerContentTypeApplicationJSON
@@ -165,7 +165,7 @@ func (sc *snowflakeConn) exec(
 	} else {
 		code = -1
 	}
-	glog.V(2).Infof("Success: %v, Code: %v", data.Success, code)
+	logger.Infof("Success: %v, Code: %v", data.Success, code)
 	if !data.Success {
 		return nil, &SnowflakeError{
 			Number:   code,
@@ -174,7 +174,7 @@ func (sc *snowflakeConn) exec(
 			QueryID:  data.Data.QueryID,
 		}
 	}
-	glog.V(2).Info("Exec/Query SUCCESS")
+	logger.Info("Exec/Query SUCCESS")
 	sc.cfg.Database = data.Data.FinalDatabaseName
 	sc.cfg.Schema = data.Data.FinalSchemaName
 	sc.cfg.Role = data.Data.FinalRoleName
@@ -238,7 +238,7 @@ func (sc *snowflakeConn) Begin() (driver.Tx, error) {
 }
 
 func (sc *snowflakeConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
-	glog.V(2).Info("BeginTx")
+	logger.Info("BeginTx")
 	if opts.ReadOnly {
 		return nil, &SnowflakeError{
 			Number:   ErrNoReadOnlyTransaction,
@@ -264,25 +264,25 @@ func (sc *snowflakeConn) BeginTx(ctx context.Context, opts driver.TxOptions) (dr
 }
 
 func (sc *snowflakeConn) cleanup() {
-	glog.Flush() // must flush log buffer while the process is running.
+	// must flush log buffer while the process is running.
 	sc.rest = nil
 	sc.cfg = nil
 }
 
 func (sc *snowflakeConn) Close() (err error) {
-	glog.V(2).Infoln("Close")
+	logger.Infoln("Close")
 	sc.stopHeartBeat()
 
 	err = sc.rest.FuncCloseSession(context.TODO(), sc.rest, sc.rest.RequestTimeout)
 	if err != nil {
-		glog.V(2).Info(err)
+		logger.Error(err)
 	}
 	sc.cleanup()
 	return nil
 }
 
 func (sc *snowflakeConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
-	glog.V(2).Infoln("Prepare")
+	logger.Infoln("Prepare")
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
 	}
@@ -298,7 +298,7 @@ func (sc *snowflakeConn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	glog.V(2).Infof("Exec: %#v, %v", query, args)
+	logger.Infof("Exec: %#v, %v", query, args)
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
 	}
@@ -306,7 +306,7 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 	qStart := time.Now()
 	data, err := sc.exec(ctx, query, false, false, false, args)
 	if err != nil {
-		glog.V(2).Infof("error: %v", err)
+		logger.Infof("error: %v", err)
 		if data != nil {
 			code, err := strconv.Atoi(data.Code)
 			if err != nil {
@@ -328,7 +328,7 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 		if err != nil {
 			return nil, err
 		}
-		glog.V(2).Infof("number of updated rows: %#v", updatedRows)
+		logger.Infof("number of updated rows: %#v", updatedRows)
 		return &snowflakeResult{
 			affectedRows: updatedRows,
 			insertID:     -1,
@@ -340,7 +340,7 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 			resultPath := fmt.Sprintf("/queries/%s/result", child.id)
 			childData, err := sc.getQueryResult(ctx, resultPath)
 			if err != nil {
-				glog.V(2).Infof("error: %v", err)
+				logger.Errorf("error: %v", err)
 				code, err := strconv.Atoi(childData.Code)
 				if err != nil {
 					return nil, err
@@ -357,7 +357,7 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 			if sc.isDml(childData.Data.StatementTypeID) {
 				count, err := updateRows(childData.Data)
 				if err != nil {
-					glog.V(2).Infof("error: %v", err)
+					logger.Errorf("error: %v", err)
 					if childData != nil {
 						code, err := strconv.Atoi(childData.Code)
 						if err != nil {
@@ -374,14 +374,14 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 				updatedRows += count
 			}
 		}
-		glog.V(2).Infof("number of updated rows: %#v", updatedRows)
-		rows := &snowflakeResult{
+		logger.Infof("number of updated rows: %#v", updatedRows)
+		return &snowflakeResult{
 			affectedRows: updatedRows,
 			insertID:     -1,
 			queryID:      sc.QueryID,
 		}, nil
 	}
-	glog.V(2).Info("DDL")
+	logger.Info("DDL")
 	return driver.ResultNoRows, nil
 }
 
@@ -401,7 +401,7 @@ func (sc *snowflakeConn) DescribeContext(ctx context.Context, query string, args
 }
 
 func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	glog.V(2).Infof("Query: %#v, %v", query, args)
+	logger.Infof("Query: %#v, %v", query, args)
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
 	}
@@ -409,7 +409,7 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 	qStart := time.Now()
 	data, err := sc.exec(ctx, query, false, false, false, args)
 	if err != nil {
-		glog.V(2).Infof("error: %v", err)
+		logger.Errorf("error: %v", err)
 		if data != nil {
 			code, err := strconv.Atoi(data.Code)
 			if err != nil {
@@ -457,7 +457,7 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 			resultPath := fmt.Sprintf("/queries/%s/result", child.id)
 			childData, err := sc.getQueryResult(ctx, resultPath)
 			if err != nil {
-				glog.V(2).Infof("error: %v", err)
+				logger.Errorf("error: %v", err)
 				if childData != nil {
 					code, err := strconv.Atoi(childData.Code)
 					if err != nil {
@@ -502,7 +502,7 @@ func (sc *snowflakeConn) Query(
 }
 
 func (sc *snowflakeConn) Ping(ctx context.Context) error {
-	glog.V(2).Infoln("Ping")
+	logger.Infoln("Ping")
 	if sc.rest == nil {
 		return driver.ErrBadConn
 	}
@@ -523,7 +523,7 @@ func (sc *snowflakeConn) CheckNamedValue(nv *driver.NamedValue) error {
 
 func (sc *snowflakeConn) populateSessionParameters(parameters []nameValueParameter) {
 	// other session parameters (not all)
-	glog.V(2).Infof("params: %#v", parameters)
+	logger.Infof("params: %#v", parameters)
 	for _, param := range parameters {
 		v := ""
 		switch param.Value.(type) {
@@ -544,7 +544,7 @@ func (sc *snowflakeConn) populateSessionParameters(parameters []nameValueParamet
 				v = vv
 			}
 		}
-		glog.V(3).Infof("parameter. name: %v, value: %v", param.Name, v)
+		logger.Debugf("parameter. name: %v, value: %v", param.Name, v)
 		sc.cfg.Params[strings.ToLower(param.Name)] = &v
 	}
 }
@@ -622,15 +622,13 @@ func (sc *snowflakeConn) getQueryResult(ctx context.Context, resultPath string) 
 	url := sc.rest.getFullURL(resultPath, &param)
 	res, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
 	if err != nil {
-		glog.V(1).Infof("failed to get response. err: %v", err)
-		glog.Flush()
+		logger.Errorf("failed to get response. err: %v", err)
 		return nil, err
 	}
 	var respd *execResponse
 	err = json.NewDecoder(res.Body).Decode(&respd)
 	if err != nil {
-		glog.V(1).Infof("failed to decode JSON. err: %v", err)
-		glog.Flush()
+		logger.Errorf("failed to decode JSON. err: %v", err)
 		return nil, err
 	}
 	return respd, nil
