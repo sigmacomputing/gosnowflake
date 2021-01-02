@@ -416,7 +416,7 @@ func fillMissingConfigParameters(cfg *Config) error {
 	return nil
 }
 
-// transformAccountToHost transforms host to accout name
+// transformAccountToHost transforms host to account name
 func transformAccountToHost(cfg *Config) (err error) {
 	if cfg.Port == 0 && !strings.HasSuffix(cfg.Host, defaultDomain) && cfg.Host != "" {
 		// account name is specified instead of host:port
