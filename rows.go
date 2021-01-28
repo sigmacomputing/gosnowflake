@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2019 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2021 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
@@ -51,9 +51,15 @@ type snowflakeRows struct {
 	RowType         []execResponseRowType
 	ChunkDownloader *snowflakeChunkDownloader
 	queryID         string
+	status          queryStatus
+	err             error
+	errChannel      chan error
 }
 
 func (rows *snowflakeRows) Close() (err error) {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return err
+	}
 	logger.WithContext(rows.sc.ctx).Debugln("Rows.Close")
 	return nil
 }
@@ -106,11 +112,17 @@ type snowflakeChunkDownloader struct {
 
 // ColumnTypeDatabaseTypeName returns the database column name.
 func (rows *snowflakeRows) ColumnTypeDatabaseTypeName(index int) string {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return err.Error()
+	}
 	return strings.ToUpper(rows.RowType[index].Type)
 }
 
 // ColumnTypeLength returns the length of the column
 func (rows *snowflakeRows) ColumnTypeLength(index int) (length int64, ok bool) {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return 0, false
+	}
 	if index < 0 || index > len(rows.RowType) {
 		return 0, false
 	}
@@ -122,6 +134,9 @@ func (rows *snowflakeRows) ColumnTypeLength(index int) (length int64, ok bool) {
 }
 
 func (rows *snowflakeRows) ColumnTypeNullable(index int) (nullable, ok bool) {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return false, false
+	}
 	if index < 0 || index > len(rows.RowType) {
 		return false, false
 	}
@@ -129,6 +144,9 @@ func (rows *snowflakeRows) ColumnTypeNullable(index int) (nullable, ok bool) {
 }
 
 func (rows *snowflakeRows) ColumnTypePrecisionScale(index int) (precision, scale int64, ok bool) {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return 0, 0, false
+	}
 	if index < 0 || index > len(rows.RowType) {
 		return 0, 0, false
 	}
@@ -144,6 +162,9 @@ func (rows *snowflakeRows) ColumnTypePrecisionScale(index int) (precision, scale
 }
 
 func (rows *snowflakeRows) Columns() []string {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return make([]string, 0)
+	}
 	logger.Debug("Rows.Columns")
 	ret := make([]string, len(rows.RowType))
 	for i, n := 0, len(rows.RowType); i < n; i++ {
@@ -174,14 +195,24 @@ func (rows *snowflakeRows) Monitoring() *QueryMonitoringData {
 }
 
 func (rows *snowflakeRows) ColumnTypeScanType(index int) reflect.Type {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return nil
+	}
 	return snowflakeTypeToGo(rows.RowType[index].Type, rows.RowType[index].Scale)
 }
 
-func (rows *snowflakeRows) QueryID() string {
+func (rows *snowflakeRows) GetQueryID() string {
 	return rows.queryID
 }
 
+func (rows *snowflakeRows) GetStatus() queryStatus {
+	return rows.status
+}
+
 func (rows *snowflakeRows) Next(dest []driver.Value) (err error) {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return err
+	}
 	row, err := rows.ChunkDownloader.Next()
 	if err != nil {
 		// includes io.EOF
@@ -209,6 +240,9 @@ func (rows *snowflakeRows) Next(dest []driver.Value) (err error) {
 }
 
 func (rows *snowflakeRows) HasNextResultSet() bool {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return false
+	}
 	if len(rows.ChunkDownloader.ChunkMetas) == 0 && rows.ChunkDownloader.NextDownloader == nil {
 		return false // no extra chunk
 	}
@@ -216,6 +250,9 @@ func (rows *snowflakeRows) HasNextResultSet() bool {
 }
 
 func (rows *snowflakeRows) NextResultSet() error {
+	if err := rows.waitForAsyncQueryStatus(); err != nil {
+		return err
+	}
 	if len(rows.ChunkDownloader.ChunkMetas) == 0 {
 		if rows.ChunkDownloader.NextDownloader == nil {
 			return io.EOF
@@ -224,6 +261,22 @@ func (rows *snowflakeRows) NextResultSet() error {
 		rows.ChunkDownloader.start()
 	}
 	return rows.ChunkDownloader.nextResultSet()
+}
+
+func (rows *snowflakeRows) waitForAsyncQueryStatus() error {
+	// if async query, block until query is finished
+	if rows.status == QueryStatusInProgress {
+		err := <-rows.errChannel
+		rows.status = QueryStatusComplete
+		if err != nil {
+			rows.status = QueryFailed
+			rows.err = err
+			return rows.err
+		}
+	} else if rows.status == QueryFailed {
+		return rows.err
+	}
+	return nil
 }
 
 func (scd *snowflakeChunkDownloader) totalUncompressedSize() (acc int64) {
