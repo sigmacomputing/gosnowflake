@@ -7,6 +7,9 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -135,6 +138,42 @@ func (sc *snowflakeConn) exec(
 	return data, err
 }
 
+func (sc *snowflakeConn) monitoring(ctx context.Context, qid string) (*QueryMonitoringData, error) {
+	fullURL := fmt.Sprintf("%s://%s:%d/monitoring/queries/%s", sc.rest.Protocol, sc.rest.Host, sc.rest.Port, qid)
+
+	headers := make(map[string]string)
+	headers["accept"] = "application/json"
+	headers["User-Agent"] = userAgent
+	headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, sc.rest.Token)
+
+	resp, err := sc.rest.FuncGet(ctx, sc.rest, fullURL, headers, sc.rest.RequestTimeout)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// (max) NOTE we don't expect this to fail
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("response returned code %d: %v", resp.StatusCode, b)
+	}
+
+	var m monitoringResponse
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+
+	if len(m.Data.Queries) != 1 {
+		return nil, nil
+	}
+
+	return &m.Data.Queries[0], nil
+}
+
 func (sc *snowflakeConn) Begin() (driver.Tx, error) {
 	return sc.BeginTx(context.TODO(), driver.TxOptions{})
 }
@@ -227,11 +266,16 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 			updatedRows += v
 		}
 		glog.V(2).Infof("number of updated rows: %#v", updatedRows)
-		return &snowflakeResult{
+		rows := &snowflakeResult{
 			affectedRows: updatedRows,
 			insertID:     -1,
 			queryID:      sc.QueryID,
-		}, nil // last insert id is not supported by Snowflake
+		}
+
+		if m, err := sc.monitoring(ctx, sc.QueryID); err != nil {
+			rows.monitoring = m
+		}
+		return rows, nil
 	}
 	glog.V(2).Info("DDL")
 	return driver.ResultNoRows, nil
@@ -281,9 +325,15 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 		FuncDownloadHelper: downloadChunkHelper,
 		FuncGet:            getChunk,
 	}
+
+	m, err := sc.monitoring(ctx, sc.QueryID)
+	if err == nil {
+		rows.monitoring = m
+	}
+
 	rows.queryID = sc.QueryID
 	rows.ChunkDownloader.start()
-	return rows, err
+	return rows, nil
 }
 
 func (sc *snowflakeConn) Exec(
