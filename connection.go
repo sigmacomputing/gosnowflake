@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -27,6 +28,14 @@ const (
 
 const (
 	sessionClientSessionKeepAlive = "client_session_keep_alive"
+)
+
+var (
+	// FetchQueryMonitoringDataThresholdMs specifies the ms threshold, over which we'll fetch the monitoring
+	// data for a Snowflake query. We use a time-based threshold, since there is a non-zero latency cost
+	// to fetch this data and we want to bound the additional latency. By default we bound to a 2% increase
+	// in latency - assuming worst case 100ms - when fetching this metadata.
+	FetchQueryMonitoringDataThresholdSec float64 = 5
 )
 
 type snowflakeConn struct {
@@ -138,8 +147,16 @@ func (sc *snowflakeConn) exec(
 	return data, err
 }
 
-func (sc *snowflakeConn) monitoring(ctx context.Context, qid string) (*QueryMonitoringData, error) {
-	fullURL := fmt.Sprintf("%s://%s:%d/monitoring/queries/%s", sc.rest.Protocol, sc.rest.Host, sc.rest.Port, qid)
+func (sc *snowflakeConn) monitoring(ctx context.Context, qid string, runtimeSec float64) (*QueryMonitoringData, error) {
+	// Exit early if this was a "fast" query
+	if runtimeSec < FetchQueryMonitoringDataThresholdSec {
+		return nil, nil
+	}
+
+	fullURL := fmt.Sprintf(
+		"%s://%s:%d/monitoring/queries/%s",
+		sc.rest.Protocol, sc.rest.Host, sc.rest.Port, qid,
+	)
 
 	headers := make(map[string]string)
 	headers["accept"] = "application/json"
@@ -250,6 +267,7 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 		return nil, driver.ErrBadConn
 	}
 	// TODO: handle noResult and isInternal
+	qStart := time.Now()
 	data, err := sc.exec(ctx, query, false, false, false, args)
 	if err != nil {
 		return nil, err
@@ -272,7 +290,7 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 			queryID:      sc.QueryID,
 		}
 
-		if m, err := sc.monitoring(ctx, sc.QueryID); err != nil {
+		if m, err := sc.monitoring(ctx, sc.QueryID, time.Since(qStart).Seconds()); err == nil {
 			rows.monitoring = m
 		}
 		return rows, nil
@@ -302,6 +320,7 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 		return nil, driver.ErrBadConn
 	}
 	// TODO: handle noResult and isInternal
+	qStart := time.Now()
 	data, err := sc.exec(ctx, query, false, false, false, args)
 	if err != nil {
 		glog.V(2).Infof("error: %v", err)
@@ -326,8 +345,7 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 		FuncGet:            getChunk,
 	}
 
-	m, err := sc.monitoring(ctx, sc.QueryID)
-	if err == nil {
+	if m, err := sc.monitoring(ctx, sc.QueryID, time.Since(qStart).Seconds()); err == nil {
 		rows.monitoring = m
 	}
 
