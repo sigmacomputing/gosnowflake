@@ -293,10 +293,7 @@ func closeSession(ctx context.Context, sr *snowflakeRestful, timeout time.Durati
 	params.Add(requestGUIDKey, uuid.New().String())
 	fullURL := sr.getFullURL(sessionRequestPath, params)
 
-	headers := make(map[string]string)
-	headers["Content-Type"] = headerContentTypeApplicationJSON
-	headers["accept"] = headerAcceptTypeApplicationSnowflake
-	headers["User-Agent"] = userAgent
+	headers := getHeaders()
 	token, _, _ := sr.TokenAccessor.GetTokens()
 	headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, token)
 
@@ -347,10 +344,7 @@ func renewRestfulSession(ctx context.Context, sr *snowflakeRestful, timeout time
 	fullURL := sr.getFullURL(tokenRequestPath, params)
 
 	token, masterToken, _ := sr.TokenAccessor.GetTokens()
-	headers := make(map[string]string)
-	headers["Content-Type"] = headerContentTypeApplicationJSON
-	headers["accept"] = headerAcceptTypeApplicationSnowflake
-	headers["User-Agent"] = userAgent
+	headers := getHeaders()
 	headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, masterToken)
 
 	body := make(map[string]string)
@@ -411,10 +405,7 @@ func cancelQuery(ctx context.Context, sr *snowflakeRestful, requestID uuid.UUID,
 
 	fullURL := sr.getFullURL(abortRequestPath, params)
 
-	headers := make(map[string]string)
-	headers["Content-Type"] = headerContentTypeApplicationJSON
-	headers["accept"] = headerAcceptTypeApplicationSnowflake
-	headers["User-Agent"] = userAgent
+	headers := getHeaders()
 	token, _, _ := sr.TokenAccessor.GetTokens()
 	headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, token)
 
