@@ -35,7 +35,7 @@ var (
 	// data for a Snowflake query. We use a time-based threshold, since there is a non-zero latency cost
 	// to fetch this data and we want to bound the additional latency. By default we bound to a 2% increase
 	// in latency - assuming worst case 100ms - when fetching this metadata.
-	FetchQueryMonitoringDataThresholdSec float64 = 5
+	FetchQueryMonitoringDataThreshold time.Duration = 5 * time.Second
 )
 
 type snowflakeConn struct {
@@ -147,9 +147,9 @@ func (sc *snowflakeConn) exec(
 	return data, err
 }
 
-func (sc *snowflakeConn) monitoring(ctx context.Context, qid string, runtimeSec float64) (*QueryMonitoringData, error) {
+func (sc *snowflakeConn) monitoring(qid string, runtimeSec time.Duration) (*QueryMonitoringData, error) {
 	// Exit early if this was a "fast" query
-	if runtimeSec < FetchQueryMonitoringDataThresholdSec {
+	if runtimeSec < FetchQueryMonitoringDataThreshold {
 		return nil, nil
 	}
 
@@ -157,6 +157,10 @@ func (sc *snowflakeConn) monitoring(ctx context.Context, qid string, runtimeSec 
 		"%s://%s:%d/monitoring/queries/%s",
 		sc.rest.Protocol, sc.rest.Host, sc.rest.Port, qid,
 	)
+
+	// Bound the GET request to 1 second in the absolute worst case.
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
 
 	headers := make(map[string]string)
 	headers["accept"] = "application/json"
@@ -290,7 +294,7 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 			queryID:      sc.QueryID,
 		}
 
-		if m, err := sc.monitoring(ctx, sc.QueryID, time.Since(qStart).Seconds()); err == nil {
+		if m, err := sc.monitoring(sc.QueryID, time.Since(qStart)); err == nil {
 			rows.monitoring = m
 		}
 		return rows, nil
@@ -345,7 +349,7 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 		FuncGet:            getChunk,
 	}
 
-	if m, err := sc.monitoring(ctx, sc.QueryID, time.Since(qStart).Seconds()); err == nil {
+	if m, err := sc.monitoring(sc.QueryID, time.Since(qStart)); err == nil {
 		rows.monitoring = m
 	}
 
