@@ -73,6 +73,7 @@ func (sc *snowflakeConn) exec(
 		AsyncExec:    noResult,
 		SequenceID:   counter,
 		DescribeOnly: describeOnly,
+		Parameters: make(map[string]string),
 	}
 	req.IsInternal = isInternal
 	tsmode := "TIMESTAMP_NTZ"
@@ -82,7 +83,9 @@ func (sc *snowflakeConn) exec(
 		for i, n := 0, len(parameters); i < n; i++ {
 			t := goTypeToSnowflake(parameters[i].Value, tsmode)
 			glog.V(2).Infof("tmode: %v\n", t)
-			if t == "CHANGE_TYPE" {
+			if paramValue, ok := parameters[i].Value.(string); ok && len(parameters[i].Name) > 0 {
+				req.Parameters[parameters[i].Name] = paramValue
+			} else if t == "CHANGE_TYPE" {
 				tsmode, err = dataTypeMode(parameters[i].Value)
 				if err != nil {
 					return nil, err
