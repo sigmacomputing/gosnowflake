@@ -85,17 +85,17 @@ func (sc *snowflakeConn) exec(
 		AsyncExec:    noResult,
 		SequenceID:   counter,
 		DescribeOnly: describeOnly,
-    Parameters: make(map[string]string),
+      Parameters: make(map[string]string),
 	}
 	req.IsInternal = isInternal
-  queryTag := sc.GetContextQueryTag(ctx)
-  if queryTag != nil {
-    jsonQueryTag, err := json.Marshal(queryTag)
-    if err != nil {
-      return nil, err
+    queryTag := sc.GetContextQueryTag(ctx)
+    if queryTag != nil {
+        jsonQueryTag, err := json.Marshal(queryTag)
+        if err != nil {
+            return nil, err
+        }
+        req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
     }
-    req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
-  }
 	tsmode := "TIMESTAMP_NTZ"
 	idx := 1
 	if len(parameters) > 0 {
