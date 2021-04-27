@@ -30,6 +30,18 @@ const (
 	sessionClientSessionKeepAlive = "client_session_keep_alive"
 )
 
+type queryTagKeyType int
+
+const (
+	_                                       = iota
+	queryTagKey       queryTagKeyType       = iota
+)
+
+type QueryTag struct {
+	RequestId string  `json:"requestId"`
+	Email string      `json:"email"`
+}
+
 var (
 	// FetchQueryMonitoringDataThresholdMs specifies the ms threshold, over which we'll fetch the monitoring
 	// data for a Snowflake query. We use a time-based threshold, since there is a non-zero latency cost
@@ -73,8 +85,17 @@ func (sc *snowflakeConn) exec(
 		AsyncExec:    noResult,
 		SequenceID:   counter,
 		DescribeOnly: describeOnly,
+    Parameters: make(map[string]string),
 	}
 	req.IsInternal = isInternal
+  queryTag := sc.GetContextQueryTag(ctx)
+  if queryTag != nil {
+    jsonQueryTag, err := json.Marshal(queryTag)
+    if err != nil {
+      return nil, err
+    }
+    req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
+  }
 	tsmode := "TIMESTAMP_NTZ"
 	idx := 1
 	if len(parameters) > 0 {
@@ -249,6 +270,20 @@ func (sc *snowflakeConn) Close() (err error) {
 	sc.cleanup()
 	return nil
 }
+
+func (sc *snowflakeConn) WithContextQueryTag(ctx context.Context, qt QueryTag) context.Context {
+	glog.V(2).Infoln("Adding QUERY_TAG")
+	return context.WithValue(ctx, queryTagKey, qt)
+}
+
+func (sc *snowflakeConn) GetContextQueryTag(ctx context.Context) *QueryTag {
+	glog.V(2).Infoln("Retrieving QUERY_TAG")
+	if qt, ok := ctx.Value(queryTagKey).(*QueryTag); ok {
+		return qt
+	}
+	return nil
+}
+
 func (sc *snowflakeConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
 	glog.V(2).Infoln("Prepare")
 	if sc.rest == nil {
