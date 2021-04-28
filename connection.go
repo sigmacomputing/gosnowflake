@@ -33,13 +33,13 @@ const (
 type queryTagKeyType int
 
 const (
-	_                                       = iota
-	queryTagKey       queryTagKeyType       = iota
+	_                           = iota
+	queryTagKey queryTagKeyType = iota
 )
 
 type QueryTag struct {
-	RequestId string  `json:"requestId"`
-	Email string      `json:"email"`
+	RequestId string `json:"requestId"`
+	Email     string `json:"email"`
 }
 
 var (
@@ -85,17 +85,20 @@ func (sc *snowflakeConn) exec(
 		AsyncExec:    noResult,
 		SequenceID:   counter,
 		DescribeOnly: describeOnly,
-      Parameters: make(map[string]string),
+		Parameters:   make(map[string]string),
 	}
 	req.IsInternal = isInternal
-    queryTag := sc.GetContextQueryTag(ctx)
-    if queryTag != nil {
-        jsonQueryTag, err := json.Marshal(queryTag)
-        if err != nil {
-            return nil, err
-        }
-        req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
-    }
+	queryTag := GetContextQueryTag(ctx)
+	if queryTag != nil {
+		jsonQueryTag, err := json.Marshal(queryTag)
+		if err != nil {
+			return nil, err
+		}
+		//req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
+		req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
+	} else {
+		req.Parameters["QUERY_TAG"] = "something is wrong"
+	}
 	tsmode := "TIMESTAMP_NTZ"
 	idx := 1
 	if len(parameters) > 0 {
@@ -271,12 +274,12 @@ func (sc *snowflakeConn) Close() (err error) {
 	return nil
 }
 
-func (sc *snowflakeConn) WithContextQueryTag(ctx context.Context, qt QueryTag) context.Context {
+func WithContextQueryTag(ctx context.Context, qt *QueryTag) context.Context {
 	glog.V(2).Infoln("Adding QUERY_TAG")
 	return context.WithValue(ctx, queryTagKey, qt)
 }
 
-func (sc *snowflakeConn) GetContextQueryTag(ctx context.Context) *QueryTag {
+func GetContextQueryTag(ctx context.Context) *QueryTag {
 	glog.V(2).Infoln("Retrieving QUERY_TAG")
 	if qt, ok := ctx.Value(queryTagKey).(*QueryTag); ok {
 		return qt
