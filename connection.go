@@ -94,10 +94,7 @@ func (sc *snowflakeConn) exec(
 		if err != nil {
 			return nil, err
 		}
-		//req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
 		req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
-	} else {
-		req.Parameters["QUERY_TAG"] = "something is wrong"
 	}
 	tsmode := "TIMESTAMP_NTZ"
 	idx := 1
