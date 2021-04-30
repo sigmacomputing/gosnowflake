@@ -30,17 +30,12 @@ const (
 	sessionClientSessionKeepAlive = "client_session_keep_alive"
 )
 
-type queryTagKeyType int
+type paramsKeyType int
 
 const (
-	_                           = iota
-	queryTagKey queryTagKeyType = iota
+	_                       = iota
+	paramsKey paramsKeyType = iota
 )
-
-type QueryTag struct {
-	RequestId string `json:"requestId"`
-	Email     string `json:"email"`
-}
 
 var (
 	// FetchQueryMonitoringDataThresholdMs specifies the ms threshold, over which we'll fetch the monitoring
@@ -88,13 +83,11 @@ func (sc *snowflakeConn) exec(
 		Parameters:   make(map[string]string),
 	}
 	req.IsInternal = isInternal
-	queryTag := GetContextQueryTag(ctx)
-	if queryTag != nil {
-		jsonQueryTag, err := json.Marshal(queryTag)
-		if err != nil {
-			return nil, err
+	statementParams := GetContextStatementParameters(ctx)
+	if statementParams != nil {
+		for k, v := range statementParams {
+			req.Parameters[k] = v
 		}
-		req.Parameters["QUERY_TAG"] = string(jsonQueryTag)
 	}
 	tsmode := "TIMESTAMP_NTZ"
 	idx := 1
@@ -271,15 +264,22 @@ func (sc *snowflakeConn) Close() (err error) {
 	return nil
 }
 
-func WithContextQueryTag(ctx context.Context, qt *QueryTag) context.Context {
-	glog.V(2).Infoln("Adding QUERY_TAG")
-	return context.WithValue(ctx, queryTagKey, qt)
+func WithContextStatementParameters(ctx context.Context, params map[string]string) context.Context {
+	glog.V(2).Infoln("Adding parameters")
+	existingParams := GetContextStatementParameters(ctx)
+	if existingParams != nil {
+		for k, v := range params {
+			existingParams[k] = v
+		}
+		params = existingParams
+	}
+	return context.WithValue(ctx, paramsKey, params)
 }
 
-func GetContextQueryTag(ctx context.Context) *QueryTag {
-	glog.V(2).Infoln("Retrieving QUERY_TAG")
-	if qt, ok := ctx.Value(queryTagKey).(*QueryTag); ok {
-		return qt
+func GetContextStatementParameters(ctx context.Context) map[string]string {
+	glog.V(2).Infoln("Retrieving parameters")
+	if params, ok := ctx.Value(paramsKey).(map[string]string); ok {
+		return params
 	}
 	return nil
 }
