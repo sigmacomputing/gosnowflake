@@ -40,7 +40,6 @@ type ColumnType struct {
 	Name     string
 	Type     string
 	Nullable bool
-	Scale    int64
 }
 
 type snowflakeRows struct {
@@ -137,7 +136,6 @@ func rowTypesToColumnTypes(rows []execResponseRowType) []ColumnType {
 			Name:     rt.Name,
 			Type:     strings.ToUpper(rt.Type),
 			Nullable: rt.Nullable,
-			Scale:    rt.Scale,
 		}
 	}
 	return ret
