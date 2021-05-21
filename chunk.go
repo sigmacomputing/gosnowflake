@@ -285,11 +285,8 @@ func (lcd *largeChunkDecoder) nextByte() byte {
 func (lcd *largeChunkDecoder) ensureBytes(n int) {
 	if lcd.rem <= n {
 		rbuf := make([]byte, defaultChunkBufferSize)
-		// NOTE when the buffer reads from the stream, there's no
-		// guarantee that it will actually be filled. As such we
-		// must use (ptr+rem) to compute the end of the slice.
-		off := copy(rbuf, lcd.rbuf[lcd.ptr:lcd.ptr+lcd.rem])
-		add := lcd.fillBuffer(rbuf[off:])
+		copy(rbuf, lcd.rbuf[lcd.ptr:])
+		add := lcd.fillBuffer(rbuf[lcd.ptr:])
 
 		lcd.ptr = 0
 		lcd.rem += add
