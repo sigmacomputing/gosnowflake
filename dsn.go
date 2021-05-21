@@ -451,11 +451,6 @@ func parseDSNParams(cfg *Config, params string) (err error) {
 			if err != nil {
 				return
 			}
-		case "requestTimeout":
-			cfg.RequestTimeout, err = parseTimeout(value)
-			if err != nil {
-				return
-			}
 		case "jwtTimeout":
 			cfg.JWTExpireTimeout, err = parseTimeout(value)
 			if err != nil {

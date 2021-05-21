@@ -4,6 +4,7 @@ package gosnowflake
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"io"
@@ -183,12 +184,12 @@ func retryHTTP(
 			totalTimeout -= sleepTime
 			if totalTimeout <= 0 {
 				if err != nil {
-					return nil, fmt.Errorf("timeout after %s. err: %v. Hanging?", timeout, err)
+					return nil, fmt.Errorf("timeout. err: %v. Hanging?", err)
 				}
 				if res != nil {
-					return nil, fmt.Errorf("timeout after %s. HTTP Status: %v. Hanging?", timeout, res.StatusCode)
+					return nil, fmt.Errorf("timeout. HTTP Status: %v. Hanging?", res.StatusCode)
 				}
-				return nil, fmt.Errorf("timeout after %s. Hanging?", timeout)
+				return nil, errors.New("timeout. Hanging?")
 			}
 		}
 		retryCounter++

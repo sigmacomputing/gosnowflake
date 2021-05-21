@@ -66,9 +66,7 @@ func (hc *heartbeat) heartbeatMain() error {
 	headers["User-Agent"] = userAgent
 	headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, hc.restful.Token)
 
-	timeout := hc.restful.RequestTimeout
-
-	resp, err := hc.restful.FuncPost(context.Background(), hc.restful, fullURL, headers, nil, timeout, false)
+	resp, err := hc.restful.FuncPost(context.Background(), hc.restful, fullURL, headers, nil, hc.restful.RequestTimeout, false)
 	if err != nil {
 		return err
 	}
@@ -83,7 +81,7 @@ func (hc *heartbeat) heartbeatMain() error {
 			return err
 		}
 		if respd.Code == sessionExpiredCode {
-			err = hc.restful.FuncRenewSession(context.TODO(), hc.restful, timeout)
+			err = hc.restful.FuncRenewSession(context.TODO(), hc.restful)
 			if err != nil {
 				return err
 			}

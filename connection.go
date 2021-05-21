@@ -176,7 +176,7 @@ func (sc *snowflakeConn) Close() (err error) {
 		glog.V(2).Info(err)
 	}
 
-	err = sc.rest.FuncCloseSession(ctx, sc.rest, sc.rest.RequestTimeout)
+	err = sc.rest.FuncCloseSession(ctx, sc.rest)
 	if err != nil {
 		glog.V(2).Info(err)
 	}
