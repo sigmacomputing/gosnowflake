@@ -3,7 +3,6 @@
 package gosnowflake
 
 import (
-	"context"
 	"database/sql"
 	"database/sql/driver"
 	"net/http"
@@ -16,8 +15,6 @@ type SnowflakeDriver struct{}
 // Open creates a new connection.
 func (d SnowflakeDriver) Open(dsn string) (driver.Conn, error) {
 	glog.V(2).Info("Open")
-	ctx := context.TODO()
-
 	var err error
 	sc := &snowflakeConn{
 		SequeceCounter: 0,
@@ -69,7 +66,6 @@ func (d SnowflakeDriver) Open(dsn string) (driver.Conn, error) {
 	switch authenticator {
 	case authenticatorExternalBrowser:
 		samlResponse, proofKey, err = authenticateByExternalBrowser(
-			ctx,
 			sc.rest,
 			sc.cfg.Authenticator,
 			sc.cfg.Application,
@@ -88,7 +84,6 @@ func (d SnowflakeDriver) Open(dsn string) (driver.Conn, error) {
 	default:
 		// this is actually okta, which is something misleading
 		samlResponse, err = authenticateBySAML(
-			ctx,
 			sc.rest,
 			sc.cfg.Authenticator,
 			sc.cfg.Application,
@@ -101,7 +96,6 @@ func (d SnowflakeDriver) Open(dsn string) (driver.Conn, error) {
 		}
 	}
 	authData, err = authenticate(
-		ctx,
 		sc,
 		samlResponse,
 		proofKey)

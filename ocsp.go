@@ -256,7 +256,6 @@ func validateOCSP(encodedCertIDBase64 string, ocspRes *ocsp.Response, subject *x
 // retryOCSP is the second level of retry method if the returned contents are corrupted. It often happens with OCSP
 // serer and retry helps.
 func retryOCSP(
-	ctx context.Context,
 	client clientInterface,
 	req requestFunc,
 	ocspHost string,
@@ -272,7 +271,7 @@ func retryOCSP(
 	sleepTime := time.Duration(0)
 	for {
 		sleepTime = defaultWaitAlgo.decorr(retryCounter, sleepTime)
-		res, err := retryHTTP(ctx, client, req, "POST", ocspHost, headers, reqBody, httpTimeout, false)
+		res, err := retryHTTP(context.TODO(), client, req, "POST", ocspHost, headers, reqBody, httpTimeout, false)
 		if err != nil {
 			if ok := retryRevocationStatusCheck(&totalTimeout, sleepTime); ok {
 				retryCounter++
@@ -328,7 +327,7 @@ func retryOCSP(
 }
 
 // getRevocationStatus checks the certificate revocation status for subject using issuer certificate.
-func getRevocationStatus(ctx context.Context, wg *sync.WaitGroup, ocspStatusChan chan<- *ocspStatus, subject, issuer *x509.Certificate) {
+func getRevocationStatus(wg *sync.WaitGroup, ocspStatusChan chan<- *ocspStatus, subject, issuer *x509.Certificate) {
 	defer wg.Done()
 	glog.V(2).Infof("Subject: %v\n", subject.Subject)
 	glog.V(2).Infof("Issuer:  %v\n", issuer.Subject)
@@ -381,7 +380,7 @@ func getRevocationStatus(ctx context.Context, wg *sync.WaitGroup, ocspStatusChan
 	headers["Accept"] = "application/ocsp-response"
 	headers["Content-Length"] = string(len(ocspReq))
 	headers["Host"] = u.Hostname()
-	ocspRes, ocspResBytes, ocspS := retryOCSP(ctx, ocspClient, http.NewRequest, ocspHost, headers, ocspReq, issuer, retryOCSPTimeout, retryOCSPHTTPTimeout)
+	ocspRes, ocspResBytes, ocspS := retryOCSP(ocspClient, http.NewRequest, ocspHost, headers, ocspReq, issuer, retryOCSPTimeout, retryOCSPHTTPTimeout)
 	if ocspS.code != ocspSuccess {
 		ocspStatusChan <- ocspS
 		return
@@ -395,7 +394,7 @@ func getRevocationStatus(ctx context.Context, wg *sync.WaitGroup, ocspStatusChan
 }
 
 // verifyPeerCertificate verifies all of certificate revocation status
-func verifyPeerCertificate(callback func(context.Context, *sync.WaitGroup, []*x509.Certificate) []*ocspStatus, verifiedChains [][]*x509.Certificate) (err error) {
+func verifyPeerCertificate(callback func(*sync.WaitGroup, []*x509.Certificate) []*ocspStatus, verifiedChains [][]*x509.Certificate) (err error) {
 	for i := 0; i < len(verifiedChains); i++ {
 		var wg sync.WaitGroup
 		n := len(verifiedChains[i]) - 1
@@ -409,7 +408,7 @@ func verifyPeerCertificate(callback func(context.Context, *sync.WaitGroup, []*x5
 			n++
 		}
 		wg.Add(n)
-		results := callback(context.TODO(), &wg, verifiedChains[i])
+		results := callback(&wg, verifiedChains[i])
 		wg.Wait()
 		for _, r := range results {
 			if r.err != nil {
@@ -421,11 +420,11 @@ func verifyPeerCertificate(callback func(context.Context, *sync.WaitGroup, []*x5
 	return nil
 }
 
-func getAllRevocationStatusParallel(ctx context.Context, wg *sync.WaitGroup, verifiedChains []*x509.Certificate) []*ocspStatus {
+func getAllRevocationStatusParallel(wg *sync.WaitGroup, verifiedChains []*x509.Certificate) []*ocspStatus {
 	n := len(verifiedChains) - 1
 	ocspStatusChan := make(chan *ocspStatus, n)
 	for j := 0; j < n; j++ {
-		go getRevocationStatus(ctx, wg, ocspStatusChan, verifiedChains[j], verifiedChains[j+1])
+		go getRevocationStatus(wg, ocspStatusChan, verifiedChains[j], verifiedChains[j+1])
 	}
 	results := make([]*ocspStatus, n)
 	for j := 0; j < n; j++ {
@@ -435,12 +434,12 @@ func getAllRevocationStatusParallel(ctx context.Context, wg *sync.WaitGroup, ver
 	return results
 }
 
-func getAllRevocationStatusSerial(ctx context.Context, wg *sync.WaitGroup, verifiedChains []*x509.Certificate) []*ocspStatus {
+func getAllRevocationStatusSerial(wg *sync.WaitGroup, verifiedChains []*x509.Certificate) []*ocspStatus {
 	n := len(verifiedChains) - 1
 	results := make([]*ocspStatus, n)
 	for j := 0; j < n; j++ {
 		ocspStatusChan := make(chan *ocspStatus, 1)
-		getRevocationStatus(ctx, wg, ocspStatusChan, verifiedChains[j], verifiedChains[j+1])
+		getRevocationStatus(wg, ocspStatusChan, verifiedChains[j], verifiedChains[j+1])
 		results[j] = <-ocspStatusChan
 		close(ocspStatusChan)
 	}

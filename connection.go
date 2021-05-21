@@ -170,13 +170,11 @@ func (sc *snowflakeConn) Close() (err error) {
 	sc.stopHeartBeat()
 
 	// ensure transaction is rollbacked
-	ctx := context.TODO()
-	_, err = sc.exec(ctx, "ROLLBACK", false, false, nil)
+	_, err = sc.exec(context.Background(), "ROLLBACK", false, false, nil)
 	if err != nil {
 		glog.V(2).Info(err)
 	}
-
-	err = sc.rest.FuncCloseSession(ctx, sc.rest)
+	err = sc.rest.FuncCloseSession(sc.rest)
 	if err != nil {
 		glog.V(2).Info(err)
 	}

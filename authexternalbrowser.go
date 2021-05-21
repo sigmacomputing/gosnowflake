@@ -6,7 +6,6 @@ package gosnowflake
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -82,7 +81,6 @@ func openBrowser(idpURL string) error {
 // Note: FuncPostAuthSaml will return a fully qualified error if
 // there is something wrong getting data from Snowflake.
 func getIdpURLProofKey(
-	ctx context.Context,
 	sr *snowflakeRestful,
 	authenticator string,
 	application string,
@@ -119,7 +117,7 @@ func getIdpURLProofKey(
 		return "", "", err
 	}
 
-	respd, err := sr.FuncPostAuthSAML(ctx, sr, headers, jsonBody, sr.LoginTimeout)
+	respd, err := sr.FuncPostAuthSAML(sr, headers, jsonBody, sr.LoginTimeout)
 	if err != nil {
 		return "", "", err
 	}
@@ -164,7 +162,6 @@ func getTokenFromResponse(response string) (string, error) {
 // - Snowflake directs the user back to the driver
 // - authenticate is complete!
 func authenticateByExternalBrowser(
-	ctx context.Context,
 	sr *snowflakeRestful,
 	authenticator string,
 	application string,
@@ -180,7 +177,7 @@ func authenticateByExternalBrowser(
 
 	callbackPort := l.Addr().(*net.TCPAddr).Port
 	idpURL, proofKey, err := getIdpURLProofKey(
-		ctx, sr, authenticator, application, account, callbackPort)
+		sr, authenticator, application, account, callbackPort)
 	if err != nil {
 		return nil, nil, err
 	}
