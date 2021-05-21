@@ -3,8 +3,6 @@
 package gosnowflake
 
 import (
-	"bufio"
-	"compress/gzip"
 	"context"
 	"database/sql/driver"
 	"encoding/json"
@@ -35,7 +33,6 @@ var (
 	maxChunkDownloaderErrorCounter = 5
 )
 
-// ColumnType TODO
 type ColumnType struct {
 	Name     string
 	Type     string
@@ -382,11 +379,10 @@ func downloadChunkHelper(ctx context.Context, scd *snowflakeChunkDownloader, idx
 	if err != nil {
 		return err
 	}
-	bufStream := bufio.NewReader(resp.Body)
 	defer resp.Body.Close()
 	glog.V(2).Infof("response returned chunk: %v, resp: %v", idx+1, resp)
 	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(bufStream)
+		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
@@ -401,30 +397,14 @@ func downloadChunkHelper(ctx context.Context, scd *snowflakeChunkDownloader, idx
 		}
 	}
 
-	return decodeChunkHelper(scd, idx, bufStream)
+	return decodeChunkHelper(scd, idx, resp.Body)
 }
 
-func decodeChunkHelper(scd *snowflakeChunkDownloader, idx int, bufStream *bufio.Reader) (err error) {
-	gzipMagic, err := bufStream.Peek(2)
-	if err != nil {
-		return err
-	}
+func decodeChunkHelper(scd *snowflakeChunkDownloader, idx int, body io.ReadCloser) (err error) {
 	start := time.Now()
-	var source io.Reader
-	if gzipMagic[0] == 0x1f && gzipMagic[1] == 0x8b {
-		// detects and uncompresses Gzip format data
-		bufStream0, err := gzip.NewReader(bufStream)
-		if err != nil {
-			return err
-		}
-		defer bufStream0.Close()
-		source = bufStream0
-	} else {
-		source = bufStream
-	}
 	st := &largeResultSetReader{
 		status: 0,
-		body:   source,
+		body:   body,
 	}
 	var respd [][]*string
 	if !CustomJSONDecoderEnabled {
