@@ -116,9 +116,6 @@ func DSN(cfg *Config) (dsn string, err error) {
 	if cfg.Application != clientType {
 		params.Add("application", cfg.Application)
 	}
-	if cfg.InsecureMode {
-		params.Add("insecureMode", "true")
-	}
 	if cfg.Protocol != "" && cfg.Protocol != "https" {
 		params.Add("protocol", cfg.Protocol)
 	}
