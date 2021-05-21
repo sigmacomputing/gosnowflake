@@ -198,15 +198,7 @@ func retryHTTP(
 		}
 		fullURL = rIDReplacer.replace()
 		glog.V(2).Infof("sleeping %v. to timeout: %v. retrying", sleepTime, totalTimeout)
-
-		await := time.NewTimer(sleepTime)
-		select {
-		case <-await.C:
-			// retry the request
-		case <-ctx.Done():
-			await.Stop()
-			return res, ctx.Err()
-		}
+		time.Sleep(sleepTime)
 	}
 	return res, err
 }
