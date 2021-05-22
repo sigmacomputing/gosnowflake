@@ -4,30 +4,33 @@ REVISION:=$(shell git rev-parse --short HEAD)
 COVFLAGS:=
 
 ## Run fmt, lint and test
-all: fmt lint cov
+all: fmt lint wss cov
 
 include gosnowflake.mak
 
 ## Run tests
-test: deps
-	eval $$(jq -r '.testconnection | to_entries | map("export \(.key)='"'"'\(.value|tostring)'"'"'")|.[]' parameters.json) && \
-        [[ -n "$(TRAVIS)" ]] && export SNOWFLAKE_TEST_PRIVATE_KEY=$(TRAVIS_BUILD_DIR)/rsa-2048-private-key.p8 || true && \
-		env | grep SNOWFLAKE | grep -v PASS | sort && \
-		go test -tags=sfdebug -race $(COVFLAGS) -v . # -stderrthreshold=INFO -vmodule=*=2 or -log_dir=$(HOME) -vmodule=connection=2,driver=2
+test_setup: test_teardown
+	python3 ci/scripts/hang_webserver.py 12345 &
+
+test_teardown:
+	kill -9 $$(ps -ewf | grep hang_webserver | grep -v grep | awk '{print $$2}') || true
+
+test: deps test_setup
+	./ci/scripts/test_component.sh
 
 ## Run Coverage tests
 cov:
 	make test COVFLAGS="-coverprofile=coverage.txt -covermode=atomic"
 
+wss: deps
+	./ci/scripts/wss.sh
+
 ## Lint
 lint: clint
-	for c in $$(ls cmd); do \
-		(cd cmd/$$c;  make lint); \
-	done
 
 ## Format source codes
 fmt: cfmt
-	for c in $$(ls cmd); do \
+	@for c in $$(ls cmd); do \
 		(cd cmd/$$c;  make fmt); \
 	done
 

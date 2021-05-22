@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2018 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2021 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
@@ -54,10 +54,12 @@ const (
 	ErrCodeServiceUnavailable = 260007
 	// ErrCodeFailedToConnect is an error code for the case where a DB connection failed due to wrong account name
 	ErrCodeFailedToConnect = 260008
-	// ErrCodeObjectNotExists is an error code for the case where the specified database object doesn't exist
-	ErrCodeObjectNotExists = 260009
+	// ErrCodeRegionOverlap is an error code for the case where a region is specified despite an account region present
+	ErrCodeRegionOverlap = 260009
 	// ErrCodePrivateKeyParseError is an error code for the case where the private key is not parsed correctly
 	ErrCodePrivateKeyParseError = 260010
+	// ErrCodeFailedToParseAuthenticator is an error code for the case where a DNS includes an invalid authenticator
+	ErrCodeFailedToParseAuthenticator = 260011
 
 	/* network */
 
@@ -96,6 +98,30 @@ const (
 	// ErrNoDefaultTransactionIsolationLevel is an error code for the case where non default isolation level is specified.
 	ErrNoDefaultTransactionIsolationLevel = 263001
 
+	/* file transfer */
+
+	// ErrInvalidStageFs is an error code denoting an inavlid stage in the file system
+	ErrInvalidStageFs = 264001
+	// ErrFailedToUploadToStage is an error code denoting the failure to upload a file to the stage
+	ErrFailedToUploadToStage = 264003
+	// ErrInvalidStageLocation is an error code denoting an invalid stage location
+	ErrInvalidStageLocation = 264004
+	// ErrLocalPathNotDirectory is an error code denoting a local path that is not a directory
+	ErrLocalPathNotDirectory = 264005
+	// ErrFileNotExists is an error code denoting the file to be transferred does not exist
+	ErrFileNotExists = 264006
+	// ErrCompressionNotSupported is an error code denoting the user specified compression type is not supported
+	ErrCompressionNotSupported = 264007
+	// ErrInternalNotMatchEncryptMaterial is an error code denoting the encryption material specified does not match
+	ErrInternalNotMatchEncryptMaterial = 264008
+
+	/* binding */
+
+	// ErrBindSerialization is an error code for a failed serialization of bind variables
+	ErrBindSerialization = 265001
+	// ErrBindUpload is an error code for the uploading process of bind elements to the stage
+	ErrBindUpload = 265002
+
 	/* converter */
 
 	// ErrInvalidTimestampTz is an error code for the case where a returned TIMESTAMP_TZ internal value is invalid
@@ -105,11 +131,43 @@ const (
 	ErrInvalidOffsetStr = 268001
 	// ErrInvalidBinaryHexForm is an error code for the case where a binary data in hex form is invalid.
 	ErrInvalidBinaryHexForm = 268002
+
+	/* OCSP */
+
+	// ErrOCSPStatusRevoked is an error code for the case where the certificate is revoked.
+	ErrOCSPStatusRevoked = 269001
+	// ErrOCSPStatusUnknown is an error code for the case where the certificate revocation status is unknown.
+	ErrOCSPStatusUnknown = 269002
+	// ErrOCSPInvalidValidity is an error code for the case where the OCSP response validity is invalid.
+	ErrOCSPInvalidValidity = 269003
+	// ErrOCSPNoOCSPResponderURL is an error code for the case where the OCSP responder URL is not attached.
+	ErrOCSPNoOCSPResponderURL = 269004
+
+	/* Query Status*/
+
+	// ErrQueryStatus when check the status of a query, receive error or no status
+	ErrQueryStatus = 279001
+	// ErrQueryIDFormat the query ID given to fetch its result is not valid
+	ErrQueryIDFormat = 279101
+	// ErrQueryReportedError server side reports the query failed with error
+	ErrQueryReportedError = 279201
+	// ErrQueryIsRunning the query is still running
+	ErrQueryIsRunning = 279301
+
+	/* GS error code */
+
+	// ErrSessionGone is an GS error code for the case that session is already closed
+	ErrSessionGone = 390111
+	// ErrRoleNotExist is a GS error code for the case that the role specified does not exist
+	ErrRoleNotExist = 390189
+	// ErrObjectNotExistOrAuthorized is a GS error code for the case that the server-side object specified does not exist
+	ErrObjectNotExistOrAuthorized = 390201
 )
 
 const (
 	errMsgFailedToParseHost                  = "failed to parse a host name. host: %v"
 	errMsgFailedToParsePort                  = "failed to parse a port number. port: %v"
+	errMsgFailedToParseAuthenticator         = "failed to parse an authenticator: %v"
 	errMsgInvalidOffsetStr                   = "offset must be a string consist of sHHMI where one sign character '+'/'-' followed by zero filled hours and minutes: %v"
 	errMsgInvalidByteArray                   = "invalid byte array: %v"
 	errMsgIdpConnectionError                 = "failed to verify URLs. authenticator: %v, token URL:%v, SSO URL:%v"
@@ -129,7 +187,11 @@ const (
 	errMsgNoDefaultTransactionIsolationLevel = "no default isolation transaction level is supported"
 	errMsgServiceUnavailable                 = "service is unavailable. check your connectivity. you may need a proxy server. HTTP: %v, URL: %v"
 	errMsgFailedToConnect                    = "failed to connect to db. verify account name is correct. HTTP: %v, URL: %v"
-	errMsgObjectNotExists                    = "specified object doesn't exists: %v"
+	errMsgOCSPStatusRevoked                  = "OCSP revoked: reason:%v, at:%v"
+	errMsgOCSPStatusUnknown                  = "OCSP unknown"
+	errMsgOCSPInvalidValidity                = "invalid validity: producedAt: %v, thisUpdate: %v, nextUpdate: %v"
+	errMsgOCSPNoOCSPResponderURL             = "no OCSP server is attached to the certificate. %v"
+	errMsgBindColumnMismatch                 = "column %v has a different number of binds (%v) than column 1 (%v)"
 )
 
 var (
@@ -147,4 +209,9 @@ var (
 	ErrEmptyPassword = &SnowflakeError{
 		Number:  ErrCodeEmptyPasswordCode,
 		Message: "password is empty"}
+
+	// ErrInvalidRegion is returned if a DSN's implicit region from account parameter and explicit region parameter conflict.
+	ErrInvalidRegion = &SnowflakeError{
+		Number:  ErrCodeRegionOverlap,
+		Message: "two regions specified"}
 )

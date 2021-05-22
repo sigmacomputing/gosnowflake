@@ -1,23 +1,25 @@
-// Copyright (c) 2017-2018 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2019 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/SermoDigital/jose/crypto"
-	"github.com/SermoDigital/jose/jws"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/form3tech-oss/jwt-go"
 )
 
 func TestUnitPostAuth(t *testing.T) {
 	sr := &snowflakeRestful{
-		Token:    "token",
-		FuncPost: postTestAfterRenew,
+		TokenAccessor: getSimpleTokenAccessor(),
+		FuncPost:      postTestAfterRenew,
 	}
 	var err error
 	_, err = postAuth(context.TODO(), sr, &url.Values{}, make(map[string]string), []byte{0x12, 0x34}, 0)
@@ -125,7 +127,7 @@ func postAuthCheckOAuth(
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
-	if ar.Data.Authenticator != authenticatorOAuth {
+	if ar.Data.Authenticator != AuthTypeOAuth.String() {
 		return nil, errors.New("Authenticator is not OAUTH")
 	}
 	if ar.Data.Token == "" {
@@ -193,17 +195,21 @@ func postAuthCheckJWTToken(_ context.Context, _ *snowflakeRestful, _ *url.Values
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
-	if ar.Data.Authenticator != authenticatorJWT {
+	if ar.Data.Authenticator != AuthTypeJwt.String() {
 		return nil, errors.New("Authenticator is not JWT")
 	}
 
-	jwt, err := jws.ParseJWT([]byte(ar.Data.Token))
-	if err != nil {
-		return nil, err
-	}
+	tokenString := ar.Data.Token
 
 	// Validate token
-	err = jwt.Validate(testPrivKey.Public(), crypto.SigningMethodRS256)
+	_, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Don't forget to validate the alg is what you expect:
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return testPrivKey.Public(), nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +241,9 @@ func getDefaultSnowflakeConn() *snowflakeConn {
 		Passcode:           "",
 		Application:        "testapp",
 	}
-	sr := &snowflakeRestful{}
+	sr := &snowflakeRestful{
+		TokenAccessor: getSimpleTokenAccessor(),
+	}
 	sc := &snowflakeConn{
 		rest: sr,
 		cfg:  &cfg,
@@ -243,14 +251,61 @@ func getDefaultSnowflakeConn() *snowflakeConn {
 	return sc
 }
 
+func TestUnitAuthenticateWithTokenAccessor(t *testing.T) {
+	expectedSessionID := int64(123)
+	expectedMasterToken := "master_token"
+	expectedToken := "auth_token"
+
+	ta := getSimpleTokenAccessor()
+	ta.SetTokens(expectedToken, expectedMasterToken, expectedSessionID)
+	sc := getDefaultSnowflakeConn()
+	sc.cfg.Authenticator = AuthTypeTokenAccessor
+	sc.cfg.TokenAccessor = ta
+	sr := &snowflakeRestful{
+		FuncPostAuth:  postAuthFailServiceIssue,
+		TokenAccessor: ta,
+	}
+	sc.rest = sr
+
+	// FuncPostAuth is set to fail, but AuthTypeTokenAccessor should not even make a call to FuncPostAuth
+	resp, err := authenticate(context.TODO(), sc, []byte{}, []byte{})
+	if err != nil {
+		t.Fatalf("should not have failed, err %v", err)
+	}
+
+	if resp.SessionID != expectedSessionID {
+		t.Fatalf("Expected session id %v but got %v", expectedSessionID, resp.SessionID)
+	}
+	if resp.Token != expectedToken {
+		t.Fatalf("Expected token %v but got %v", expectedToken, resp.Token)
+	}
+	if resp.MasterToken != expectedMasterToken {
+		t.Fatalf("Expected master token %v but got %v", expectedMasterToken, resp.MasterToken)
+	}
+	if resp.SessionInfo.DatabaseName != sc.cfg.Database {
+		t.Fatalf("Expected database %v but got %v", sc.cfg.Database, resp.SessionInfo.DatabaseName)
+	}
+	if resp.SessionInfo.WarehouseName != sc.cfg.Warehouse {
+		t.Fatalf("Expected warehouse %v but got %v", sc.cfg.Warehouse, resp.SessionInfo.WarehouseName)
+	}
+	if resp.SessionInfo.RoleName != sc.cfg.Role {
+		t.Fatalf("Expected role %v but got %v", sc.cfg.Role, resp.SessionInfo.RoleName)
+	}
+	if resp.SessionInfo.SchemaName != sc.cfg.Schema {
+		t.Fatalf("Expected schema %v but got %v", sc.cfg.Schema, resp.SessionInfo.SchemaName)
+	}
+}
+
 func TestUnitAuthenticate(t *testing.T) {
 	var err error
 	var driverErr *SnowflakeError
 	var ok bool
 
+	ta := getSimpleTokenAccessor()
 	sc := getDefaultSnowflakeConn()
 	sr := &snowflakeRestful{
-		FuncPostAuth: postAuthFailServiceIssue,
+		FuncPostAuth:  postAuthFailServiceIssue,
+		TokenAccessor: ta,
 	}
 	sc.rest = sr
 
@@ -280,19 +335,29 @@ func TestUnitAuthenticate(t *testing.T) {
 	if !ok || driverErr.Number != ErrFailedToAuth {
 		t.Fatalf("Snowflake error is expected. err: %v", driverErr)
 	}
+	ta.SetTokens("bad-token", "bad-master-token", 1)
 	sr.FuncPostAuth = postAuthSuccessWithErrorCode
 	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
 	if err == nil {
 		t.Fatal("should have failed.")
 	}
+	newToken, newMasterToken, newSessionID := ta.GetTokens()
+	if newToken != "" || newMasterToken != "" || newSessionID != -1 {
+		t.Fatalf("failed auth should have reset tokens: %v %v %v", newToken, newMasterToken, newSessionID)
+	}
 	driverErr, ok = err.(*SnowflakeError)
 	if !ok || driverErr.Number != 98765 {
 		t.Fatalf("Snowflake error is expected. err: %v", driverErr)
 	}
+	ta.SetTokens("bad-token", "bad-master-token", 1)
 	sr.FuncPostAuth = postAuthSuccessWithInvalidErrorCode
 	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
 	if err == nil {
 		t.Fatal("should have failed.")
+	}
+	oldToken, oldMasterToken, oldSessionID := ta.GetTokens()
+	if oldToken != "" || oldMasterToken != "" || oldSessionID != -1 {
+		t.Fatalf("failed auth should have reset tokens: %v %v %v", oldToken, oldMasterToken, oldSessionID)
 	}
 	sr.FuncPostAuth = postAuthSuccess
 	var resp *authResponseMain
@@ -303,15 +368,30 @@ func TestUnitAuthenticate(t *testing.T) {
 	if resp.SessionInfo.DatabaseName != "dbn" {
 		t.Fatalf("failed to get response from auth")
 	}
+	newToken, newMasterToken, newSessionID = ta.GetTokens()
+	if newToken == oldToken {
+		t.Fatalf("new token was not set: %v", newToken)
+	}
+	if newMasterToken == oldMasterToken {
+		t.Fatalf("new master token was not set: %v", newMasterToken)
+	}
+	if newSessionID == oldSessionID {
+		t.Fatalf("new session id was not set: %v", newSessionID)
+	}
 }
 
 func TestUnitAuthenticateSaml(t *testing.T) {
 	var err error
 	sr := &snowflakeRestful{
-		FuncPostAuth: postAuthCheckSAMLResponse,
+		FuncPostAuth:  postAuthCheckSAMLResponse,
+		TokenAccessor: getSimpleTokenAccessor(),
 	}
 	sc := getDefaultSnowflakeConn()
-	sc.cfg.Authenticator = authenticatorOkta
+	sc.cfg.Authenticator = AuthTypeOkta
+	sc.cfg.OktaURL = &url.URL{
+		Scheme: "https",
+		Host:   "blah.okta.com",
+	}
 	sc.rest = sr
 	_, err = authenticate(context.TODO(), sc, []byte("HTML data in bytes from"), []byte{})
 	if err != nil {
@@ -323,11 +403,12 @@ func TestUnitAuthenticateSaml(t *testing.T) {
 func TestUnitAuthenticateOAuth(t *testing.T) {
 	var err error
 	sr := &snowflakeRestful{
-		FuncPostAuth: postAuthCheckOAuth,
+		FuncPostAuth:  postAuthCheckOAuth,
+		TokenAccessor: getSimpleTokenAccessor(),
 	}
 	sc := getDefaultSnowflakeConn()
 	sc.cfg.Token = "oauthToken"
-	sc.cfg.Authenticator = authenticatorOAuth
+	sc.cfg.Authenticator = AuthTypeOAuth
 	sc.rest = sr
 	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
 	if err != nil {
@@ -338,7 +419,8 @@ func TestUnitAuthenticateOAuth(t *testing.T) {
 func TestUnitAuthenticatePasscode(t *testing.T) {
 	var err error
 	sr := &snowflakeRestful{
-		FuncPostAuth: postAuthCheckPasscode,
+		FuncPostAuth:  postAuthCheckPasscode,
+		TokenAccessor: getSimpleTokenAccessor(),
 	}
 	sc := getDefaultSnowflakeConn()
 	sc.cfg.Passcode = "987654321"
@@ -354,5 +436,34 @@ func TestUnitAuthenticatePasscode(t *testing.T) {
 	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
 	if err != nil {
 		t.Fatalf("failed to run. err: %v", err)
+	}
+}
+
+// Test JWT function in the local environment against the validation function in go
+func TestUnitAuthenticateJWT(t *testing.T) {
+	var err error
+
+	sr := &snowflakeRestful{
+		FuncPostAuth:  postAuthCheckJWTToken,
+		TokenAccessor: getSimpleTokenAccessor(),
+	}
+	sc := getDefaultSnowflakeConn()
+	sc.cfg.Authenticator = AuthTypeJwt
+	sc.cfg.JWTExpireTimeout = defaultJWTTimeout
+	sc.cfg.PrivateKey = testPrivKey
+	sc.rest = sr
+
+	// A valid JWT token should pass
+	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
+	if err != nil {
+		t.Fatalf("failed to run. err: %v", err)
+	}
+
+	// An invalid JWT token should not pass
+	invalidPrivateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	sc.cfg.PrivateKey = invalidPrivateKey
+	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
+	if err == nil {
+		t.Fatalf("invalid token passed")
 	}
 }

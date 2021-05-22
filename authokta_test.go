@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2018 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2019 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
@@ -13,12 +13,12 @@ import (
 
 func TestUnitPostBackURL(t *testing.T) {
 	c := `<html><form id="1" action="https&#x3a;&#x2f;&#x2f;abc.com&#x2f;"></form></html>`
-	urlp, err := postBackURL([]byte(c))
+	pbURL, err := postBackURL([]byte(c))
 	if err != nil {
 		t.Fatalf("failed to get URL. err: %v, %v", err, c)
 	}
-	if urlp != "https://abc.com/" {
-		t.Errorf("failed to get URL. got: %v, %v", urlp, c)
+	if pbURL.String() != "https://abc.com/" {
+		t.Errorf("failed to get URL. got: %v, %v", pbURL, c)
 	}
 	c = `<html></html>`
 	_, err = postBackURL([]byte(c))
@@ -37,55 +37,21 @@ func TestUnitPostBackURL(t *testing.T) {
 	}
 }
 
-type tcIsPrefixEqual struct {
-	url1   string
-	url2   string
-	result bool
-	err    error
-}
-
-func TestUnitIsPrefixEqual(t *testing.T) {
-	testcases := []tcIsPrefixEqual{
-		{url1: "https://abc.com/", url2: "https://abc.com", result: true},
-		{url1: "https://def.com/", url2: "https://abc.com", result: false},
-		{url1: "http://def.com", url2: "https://def.com", result: false},
-		{url1: "afdafdafadfs", url2: "https://def.com", result: false},
-		{url1: "http://def.com", url2: "afdafafd", result: false},
-		{url1: "https://abc.com", url2: "https://abc.com:443/", result: true},
-	}
-	for _, test := range testcases {
-		r, err := isPrefixEqual(test.url1, test.url2)
-		if test.err != nil {
-			if err == nil {
-				t.Errorf("should have failed. url1: %v, url2: %v, got: %v, expected err: %v", test.url1, test.url2, r, test.err)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("failed. url1: %v, url2: %v, expected: %v, err: %v", test.url1, test.url2, test.result, err)
-		} else {
-			if r && !test.result || !r && test.result {
-				t.Errorf("failed. url1: %v, url2: %v, expected: %v, got: %v", test.url1, test.url2, test.result, r)
-			}
-		}
-	}
-}
-
-func getTestError(_ context.Context, _ *snowflakeRestful, _ string, _ map[string]string, _ time.Duration) (*http.Response, error) {
+func getTestError(_ context.Context, _ *snowflakeRestful, _ *url.URL, _ map[string]string, _ time.Duration) (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       &fakeResponseBody{body: []byte{0x12, 0x34}},
 	}, errors.New("failed to run post method")
 }
 
-func getTestAppBadGatewayError(_ context.Context, _ *snowflakeRestful, _ string, _ map[string]string, _ time.Duration) (*http.Response, error) {
+func getTestAppBadGatewayError(_ context.Context, _ *snowflakeRestful, _ *url.URL, _ map[string]string, _ time.Duration) (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusBadGateway,
 		Body:       &fakeResponseBody{body: []byte{0x12, 0x34}},
 	}, nil
 }
 
-func getTestHTMLSuccess(_ context.Context, _ *snowflakeRestful, _ string, _ map[string]string, _ time.Duration) (*http.Response, error) {
+func getTestHTMLSuccess(_ context.Context, _ *snowflakeRestful, _ *url.URL, _ map[string]string, _ time.Duration) (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       &fakeResponseBody{body: []byte("<htm></html>")},
@@ -94,7 +60,8 @@ func getTestHTMLSuccess(_ context.Context, _ *snowflakeRestful, _ string, _ map[
 
 func TestUnitPostAuthSAML(t *testing.T) {
 	sr := &snowflakeRestful{
-		FuncPost: postTestError,
+		FuncPost:      postTestError,
+		TokenAccessor: getSimpleTokenAccessor(),
 	}
 	var err error
 	_, err = postAuthSAML(context.TODO(), sr, make(map[string]string), []byte{}, 0)
@@ -115,7 +82,8 @@ func TestUnitPostAuthSAML(t *testing.T) {
 
 func TestUnitPostAuthOKTA(t *testing.T) {
 	sr := &snowflakeRestful{
-		FuncPost: postTestError,
+		FuncPost:      postTestError,
+		TokenAccessor: getSimpleTokenAccessor(),
 	}
 	var err error
 	_, err = postAuthOKTA(context.TODO(), sr, make(map[string]string), []byte{}, "hahah", 0)
@@ -136,7 +104,8 @@ func TestUnitPostAuthOKTA(t *testing.T) {
 
 func TestUnitGetSSO(t *testing.T) {
 	sr := &snowflakeRestful{
-		FuncGet: getTestError,
+		FuncGet:       getTestError,
+		TokenAccessor: getSimpleTokenAccessor(),
 	}
 	var err error
 	_, err = getSSO(context.TODO(), sr, &url.Values{}, make(map[string]string), "hahah", 0)
@@ -209,7 +178,10 @@ func getSSOSuccess(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[
 }
 
 func TestUnitAuthenticateBySAML(t *testing.T) {
-	authenticator := "https://abc.com/"
+	authenticator := &url.URL{
+		Scheme: "https",
+		Host:   "abc.com",
+	}
 	application := "testapp"
 	account := "testaccount"
 	user := "u"
@@ -219,6 +191,7 @@ func TestUnitAuthenticateBySAML(t *testing.T) {
 		Host:             "abc.com",
 		Port:             443,
 		FuncPostAuthSAML: postAuthSAMLError,
+		TokenAccessor:    getSimpleTokenAccessor(),
 	}
 	var err error
 	_, err = authenticateBySAML(context.TODO(), sr, authenticator, application, account, user, password)

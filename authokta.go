@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2018 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2019 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
@@ -13,8 +13,6 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type authOKTARequest struct {
@@ -53,17 +51,17 @@ Explanation:
 func authenticateBySAML(
 	ctx context.Context,
 	sr *snowflakeRestful,
-	authenticator string,
+	oktaURL *url.URL,
 	application string,
 	account string,
 	user string,
 	password string,
 ) (samlResponse []byte, err error) {
-	glog.V(2).Info("step 1: query GS to obtain IDP token and SSO url")
+	logger.WithContext(ctx).Info("step 1: query GS to obtain IDP token and SSO url")
 	headers := make(map[string]string)
-	headers["Content-Type"] = headerContentTypeApplicationJSON
-	headers["accept"] = headerContentTypeApplicationJSON
-	headers["User-Agent"] = userAgent
+	headers[httpHeaderContentType] = headerContentTypeApplicationJSON
+	headers[httpHeaderAccept] = headerContentTypeApplicationJSON
+	headers[httpHeaderUserAgent] = userAgent
 
 	clientEnvironment := authRequestClientEnvironment{
 		Application: application,
@@ -75,7 +73,7 @@ func authenticateBySAML(
 		ClientAppVersion:  SnowflakeGoDriverVersion,
 		AccountName:       account,
 		ClientEnvironment: clientEnvironment,
-		Authenticator:     authenticator,
+		Authenticator:     oktaURL.String(),
 	}
 	authRequest := authRequest{
 		Data: requestMain,
@@ -85,17 +83,14 @@ func authenticateBySAML(
 	if err != nil {
 		return nil, err
 	}
-	glog.V(2).Infof("PARAMS for Auth: %v, %v", params, sr)
+	logger.WithContext(ctx).Infof("PARAMS for Auth: %v, %v", params, sr)
 	respd, err := sr.FuncPostAuthSAML(ctx, sr, headers, jsonBody, sr.LoginTimeout)
 	if err != nil {
 		return nil, err
 	}
 	if !respd.Success {
-		glog.V(1).Infoln("Authentication FAILED")
-		glog.Flush()
-		sr.Token = ""
-		sr.MasterToken = ""
-		sr.SessionID = -1
+		logger.Errorln("Authentication FAILED")
+		sr.TokenAccessor.SetTokens("", "", -1)
 		code, err := strconv.Atoi(respd.Code)
 		if err != nil {
 			code = -1
@@ -107,23 +102,24 @@ func authenticateBySAML(
 			Message:  respd.Message,
 		}
 	}
-	glog.V(2).Info("step 2: validate Token and SSO URL has the same prefix as authenticator")
-	var b1, b2 bool
-	if b1, err = isPrefixEqual(authenticator, respd.Data.TokenURL); err != nil {
-		return nil, err
+	logger.WithContext(ctx).Info("step 2: validate Token and SSO URL has the same prefix as oktaURL")
+	var tokenURL *url.URL
+	var ssoURL *url.URL
+	if tokenURL, err = url.Parse(respd.Data.TokenURL); err != nil {
+		return nil, fmt.Errorf("failed to parse token URL. %v", respd.Data.TokenURL)
 	}
-	if b2, err = isPrefixEqual(authenticator, respd.Data.SSOURL); err != nil {
-		return nil, err
+	if ssoURL, err = url.Parse(respd.Data.TokenURL); err != nil {
+		return nil, fmt.Errorf("failed to parse ssoURL URL. %v", respd.Data.SSOURL)
 	}
-	if !b1 || !b2 {
+	if !isPrefixEqual(oktaURL, ssoURL) || !isPrefixEqual(oktaURL, tokenURL) {
 		return nil, &SnowflakeError{
 			Number:      ErrCodeIdpConnectionError,
 			SQLState:    SQLStateConnectionRejected,
 			Message:     errMsgIdpConnectionError,
-			MessageArgs: []interface{}{authenticator, respd.Data.TokenURL, respd.Data.SSOURL},
+			MessageArgs: []interface{}{oktaURL, respd.Data.TokenURL, respd.Data.SSOURL},
 		}
 	}
-	glog.V(2).Info("step 3: query IDP token url to authenticate and retrieve access token")
+	logger.WithContext(ctx).Info("step 3: query IDP token url to authenticate and retrieve access token")
 	jsonBody, err = json.Marshal(authOKTARequest{
 		Username: user,
 		Password: password,
@@ -136,28 +132,26 @@ func authenticateBySAML(
 		return nil, err
 	}
 
-	glog.V(2).Info("step 4: query IDP URL snowflake app to get SAML response")
+	logger.WithContext(ctx).Info("step 4: query IDP URL snowflake app to get SAML response")
 	params = &url.Values{}
 	params.Add("RelayState", "/some/deep/link")
 	params.Add("onetimetoken", respa.CookieToken)
 
 	headers = make(map[string]string)
-	headers["accept"] = "*/*"
+	headers[httpHeaderAccept] = "*/*"
 	bd, err := sr.FuncGetSSO(ctx, sr, params, headers, respd.Data.SSOURL, sr.LoginTimeout)
 	if err != nil {
 		return nil, err
 	}
-	glog.V(2).Info("step 5: validate post_back_url matches Snowflake URL")
+	logger.WithContext(ctx).Info("step 5: validate post_back_url matches Snowflake URL")
 	tgtURL, err := postBackURL(bd)
 	if err != nil {
 		return nil, err
 	}
-	fullURL := fmt.Sprintf("%s://%s:%d", sr.Protocol, sr.Host, sr.Port)
-	glog.V(2).Infof("tgtURL: %v, origURL: %v", tgtURL, fullURL)
-	if b2, err = isPrefixEqual(tgtURL, fullURL); err != nil {
-		return nil, err
-	}
-	if !b2 {
+
+	fullURL := sr.getURL()
+	logger.WithContext(ctx).Infof("tgtURL: %v, origURL: %v", tgtURL, fullURL)
+	if !isPrefixEqual(tgtURL, fullURL) {
 		return nil, &SnowflakeError{
 			Number:      ErrCodeSSOURLNotMatch,
 			SQLState:    SQLStateConnectionRejected,
@@ -168,35 +162,25 @@ func authenticateBySAML(
 	return bd, nil
 }
 
-func postBackURL(htmlData []byte) (urlp string, err error) {
+func postBackURL(htmlData []byte) (url *url.URL, err error) {
 	idx0 := bytes.Index(htmlData, []byte("<form"))
 	if idx0 < 0 {
-		return "", fmt.Errorf("failed to find a form tag in HTML response: %v", htmlData)
+		return nil, fmt.Errorf("failed to find a form tag in HTML response: %v", htmlData)
 	}
 	idx := bytes.Index(htmlData[idx0:], []byte("action=\""))
 	if idx < 0 {
-		return "", fmt.Errorf("failed to find action field in HTML response: %v", htmlData[idx0:])
+		return nil, fmt.Errorf("failed to find action field in HTML response: %v", htmlData[idx0:])
 	}
 	idx += idx0
 	endIdx := bytes.Index(htmlData[idx+8:], []byte("\""))
 	if endIdx < 0 {
-		return "", fmt.Errorf("failed to find the end of action field: %v", htmlData[idx+8:])
+		return nil, fmt.Errorf("failed to find the end of action field: %v", htmlData[idx+8:])
 	}
 	r := html.UnescapeString(string(htmlData[idx+8 : idx+8+endIdx]))
-	return r, nil
+	return url.Parse(r)
 }
 
-func isPrefixEqual(url1 string, url2 string) (bool, error) {
-	var err error
-	var u1, u2 *url.URL
-	u1, err = url.Parse(url1)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse URL. %v", url1)
-	}
-	u2, err = url.Parse(url2)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse URL. %v", url2)
-	}
+func isPrefixEqual(u1 *url.URL, u2 *url.URL) bool {
 	p1 := u1.Port()
 	if p1 == "" && u1.Scheme == "https" {
 		p1 = "443"
@@ -205,7 +189,7 @@ func isPrefixEqual(url1 string, url2 string) (bool, error) {
 	if p2 == "" && u1.Scheme == "https" {
 		p2 = "443"
 	}
-	return u1.Hostname() == u2.Hostname() && p1 == p2 && u1.Scheme == u2.Scheme, nil
+	return u1.Hostname() == u2.Hostname() && p1 == p2 && u1.Scheme == u2.Scheme
 }
 
 // Makes a request to /session/authenticator-request to get SAML Information,
@@ -217,23 +201,22 @@ func postAuthSAML(
 	body []byte,
 	timeout time.Duration) (
 	data *authResponse, err error) {
-	requestID := fmt.Sprintf("requestId=%v", uuid.New().String())
-	fullURL := fmt.Sprintf(
-		"%s://%s:%d%s", sr.Protocol, sr.Host, sr.Port,
-		"/session/authenticator-request?"+requestID)
-	glog.V(2).Infof("fullURL: %v", fullURL)
+
+	params := &url.Values{}
+	params.Add(requestIDKey, getOrGenerateRequestIDFromContext(ctx).String())
+	fullURL := sr.getFullURL(authenticatorRequestPath, params)
+
+	logger.Infof("fullURL: %v", fullURL)
 	resp, err := sr.FuncPost(ctx, sr, fullURL, headers, body, timeout, true)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
-		glog.V(2).Infof("postAuthSAML: resp: %v", resp)
 		var respd authResponse
 		err = json.NewDecoder(resp.Body).Decode(&respd)
 		if err != nil {
-			glog.V(1).Infof("failed to decode JSON. err: %v", err)
-			glog.Flush()
+			logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
 			return nil, err
 		}
 		return &respd, nil
@@ -258,11 +241,9 @@ func postAuthSAML(
 	}
 	_, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.V(1).Infof("failed to extract HTTP response body. err: %v", err)
-		glog.Flush()
+		logger.WithContext(ctx).Errorf("failed to extract HTTP response body. err: %v", err)
 		return nil, err
 	}
-	glog.Flush()
 	return nil, &SnowflakeError{
 		Number:      ErrFailedToAuthSAML,
 		SQLState:    SQLStateConnectionRejected,
@@ -279,32 +260,32 @@ func postAuthOKTA(
 	fullURL string,
 	timeout time.Duration) (
 	data *authOKTAResponse, err error) {
-	glog.V(2).Infof("fullURL: %v", fullURL)
-	resp, err := sr.FuncPost(ctx, sr, fullURL, headers, body, timeout, false)
+	logger.Infof("fullURL: %v", fullURL)
+	targetURL, err := url.Parse(fullURL)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := sr.FuncPost(ctx, sr, targetURL, headers, body, timeout, false)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
-		glog.V(2).Infof("postAuthOKTA: resp: %v", resp)
 		var respd authOKTAResponse
 		err = json.NewDecoder(resp.Body).Decode(&respd)
 		if err != nil {
-			glog.V(1).Infof("failed to decode JSON. err: %v", err)
-			glog.Flush()
+			logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
 			return nil, err
 		}
 		return &respd, nil
 	}
-	b, err := ioutil.ReadAll(resp.Body)
+	_, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.V(1).Infof("failed to extract HTTP response body. err: %v", err)
-		glog.Flush()
+		logger.Errorf("failed to extract HTTP response body. err: %v", err)
 		return nil, err
 	}
-	glog.V(1).Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, fullURL, b)
-	glog.V(1).Infof("Header: %v", resp.Header)
-	glog.Flush()
+	logger.WithContext(ctx).Infof("HTTP: %v, URL: %v", resp.StatusCode, fullURL)
+	logger.WithContext(ctx).Infof("Header: %v", resp.Header)
 	return nil, &SnowflakeError{
 		Number:      ErrFailedToAuthOKTA,
 		SQLState:    SQLStateConnectionRejected,
@@ -318,11 +299,15 @@ func getSSO(
 	sr *snowflakeRestful,
 	params *url.Values,
 	headers map[string]string,
-	url string,
+	ssoURL string,
 	timeout time.Duration) (
 	bd []byte, err error) {
-	fullURL := fmt.Sprintf("%s?%s", url, params.Encode())
-	glog.V(2).Infof("fullURL: %v", fullURL)
+	fullURL, err := url.Parse(ssoURL)
+	if err != nil {
+		return nil, err
+	}
+	fullURL.RawQuery = params.Encode()
+	logger.WithContext(ctx).Infof("fullURL: %v", fullURL)
 	resp, err := sr.FuncGet(ctx, sr, fullURL, headers, timeout)
 	if err != nil {
 		return nil, err
@@ -330,17 +315,14 @@ func getSSO(
 	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.V(1).Infof("failed to extract HTTP response body. err: %v", err)
-		glog.Flush()
+		logger.WithContext(ctx).Errorf("failed to extract HTTP response body. err: %v", err)
 		return nil, err
 	}
 	if resp.StatusCode == http.StatusOK {
-		glog.V(2).Infof("getSSO: resp: %v", resp)
 		return b, nil
 	}
-	glog.V(1).Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, fullURL, b)
-	glog.V(1).Infof("Header: %v", resp.Header)
-	glog.Flush()
+	logger.WithContext(ctx).Infof("HTTP: %v, URL: %v ", resp.StatusCode, fullURL)
+	logger.WithContext(ctx).Infof("Header: %v", resp.Header)
 	return nil, &SnowflakeError{
 		Number:      ErrFailedToGetSSO,
 		SQLState:    SQLStateConnectionRejected,

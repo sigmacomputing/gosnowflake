@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2018 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2020 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
@@ -9,13 +9,18 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"math/big"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -32,6 +37,11 @@ var (
 	protocol         string
 	customPrivateKey bool            // Whether user has specified the private key path
 	testPrivKey      *rsa.PrivateKey // Valid private key used for all test cases
+)
+
+const (
+	forceArrow  = "ALTER SESSION SET GO_QUERY_RESULT_FORMAT = ARROW_FORCE"
+	PSTLocation = "America/Los_Angeles"
 )
 
 // The tests require the following parameters in the environment variables.
@@ -57,7 +67,7 @@ func init() {
 
 	protocol = env("SNOWFLAKE_TEST_PROTOCOL", "https")
 	host = os.Getenv("SNOWFLAKE_TEST_HOST")
-	port = os.Getenv("SNOWFLAKE_TEST_PORT")
+	port = env("SNOWFLAKE_TEST_PORT", "443")
 	if host == "" {
 		host = fmt.Sprintf("%s.snowflakecomputing.com", account)
 	} else {
@@ -102,8 +112,11 @@ func setup() (string, error) {
 	}
 
 	orgSchemaname := schemaname
-	if env("TRAVIS", "") == "true" {
-		schemaname = fmt.Sprintf("TRAVIS_JOB_%v", env("TRAVIS_JOB_ID", "testschema"))
+	if env("GITHUB_WORKFLOW", "") != "" {
+		githubRunnerID := env("RUNNER_TRACKING_ID", "GITHUB_RUNNER_ID")
+		githubRunnerID = strings.ReplaceAll(githubRunnerID, "-", "_")
+		githubSha := env("GITHUB_SHA", "GITHUB_SHA")
+		schemaname = fmt.Sprintf("%v_%v", githubRunnerID, githubSha)
 	} else {
 		schemaname = fmt.Sprintf("golang_%v", time.Now().UnixNano())
 	}
@@ -121,7 +134,7 @@ func setup() (string, error) {
 }
 
 // teardown drops the test schema
-func teardown(s string) error {
+func teardown() error {
 	var db *sql.DB
 	var err error
 	if db, err = sql.Open("snowflake", dsn); err != nil {
@@ -135,16 +148,21 @@ func teardown(s string) error {
 }
 
 func TestMain(m *testing.M) {
+	flag.Parse()
+	signal.Ignore(syscall.SIGQUIT)
 	if value := os.Getenv("SKIP_SETUP"); value != "" {
 		os.Exit(m.Run())
 	}
 
-	orgSchemaname, err := setup()
+	_, err := setup()
 	if err != nil {
 		panic(err)
 	}
 	ret := m.Run()
-	teardown(orgSchemaname)
+	err = teardown()
+	if err != nil {
+		panic(err)
+	}
 	os.Exit(ret)
 }
 
@@ -153,25 +171,108 @@ type DBTest struct {
 	db *sql.DB
 }
 
-func (dbt *DBTest) mustQuery(query string, args ...interface{}) (rows *sql.Rows) {
+type RowsExtended struct {
+	rows      *sql.Rows
+	closeChan *chan bool
+}
+
+func (rs *RowsExtended) Close() error {
+	*rs.closeChan <- true
+	close(*rs.closeChan)
+	return rs.rows.Close()
+}
+func (rs *RowsExtended) ColumnTypes() ([]*sql.ColumnType, error) {
+	return rs.rows.ColumnTypes()
+}
+func (rs *RowsExtended) Columns() ([]string, error) {
+	return rs.rows.Columns()
+}
+
+func (rs *RowsExtended) Err() error {
+	return rs.rows.Err()
+}
+func (rs *RowsExtended) Next() bool {
+	return rs.rows.Next()
+}
+func (rs *RowsExtended) NextResultSet() bool {
+	return rs.rows.NextResultSet()
+}
+
+func (rs *RowsExtended) Scan(dest ...interface{}) error {
+	return rs.rows.Scan(dest...)
+}
+
+func (dbt *DBTest) mustQuery(query string, args ...interface{}) (rows *RowsExtended) {
 	// handler interrupt signal
 	ctx, cancel := context.WithCancel(context.Background())
 	c := make(chan os.Signal, 1)
+	c0 := make(chan bool, 1)
 	signal.Notify(c, os.Interrupt)
 	defer func() {
 		signal.Stop(c)
 	}()
 	go func() {
-		<-c
-		fmt.Println("Caught signal, canceling...")
-		cancel()
+		select {
+		case <-c:
+			fmt.Println("Caught signal, canceling...")
+			cancel()
+		case <-ctx.Done():
+			fmt.Println("Done")
+		case <-c0:
+		}
+		close(c)
 	}()
 
-	rows, err := dbt.db.QueryContext(ctx, query, args...)
+	rs, err := dbt.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		dbt.fail("query", query, err)
 	}
-	return rows
+	return &RowsExtended{
+		rows:      rs,
+		closeChan: &c0,
+	}
+}
+
+func (dbt *DBTest) mustQueryContext(ctx context.Context, query string, args ...interface{}) (rows *RowsExtended) {
+	// handler interrupt signal
+	ctx, cancel := context.WithCancel(ctx)
+	c := make(chan os.Signal, 1)
+	c0 := make(chan bool, 1)
+	signal.Notify(c, os.Interrupt)
+	defer func() {
+		signal.Stop(c)
+	}()
+	go func() {
+		select {
+		case <-c:
+			fmt.Println("Caught signal, canceling...")
+			cancel()
+		case <-ctx.Done():
+			fmt.Println("Done")
+		case <-c0:
+		}
+		close(c)
+	}()
+
+	rs, err := dbt.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		dbt.fail("query", query, err)
+	}
+	return &RowsExtended{
+		rows:      rs,
+		closeChan: &c0,
+	}
+}
+
+func (dbt *DBTest) mustQueryAssertCount(query string, expected int, args ...interface{}) {
+	rows := dbt.mustQuery(query, args...)
+	cnt := 0
+	for rows.Next() {
+		cnt++
+	}
+	if cnt != expected {
+		dbt.Fatalf("expected %v, got %v", expected, cnt)
+	}
 }
 
 func (dbt *DBTest) fail(method, query string, err error) {
@@ -185,6 +286,14 @@ func (dbt *DBTest) mustExec(query string, args ...interface{}) (res sql.Result) 
 	res, err := dbt.db.Exec(query, args...)
 	if err != nil {
 		dbt.fail("exec", query, err)
+	}
+	return res
+}
+
+func (dbt *DBTest) mustExecContext(ctx context.Context, query string, args ...interface{}) (res sql.Result) {
+	res, err := dbt.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		dbt.fail("exec context", query, err)
 	}
 	return res
 }
@@ -232,6 +341,14 @@ func (dbt *DBTest) mustNullable(ct *sql.ColumnType) (canNull bool) {
 	return canNull
 }
 
+func (dbt *DBTest) mustPrepare(query string) (stmt *sql.Stmt) {
+	stmt, err := dbt.db.Prepare(query)
+	if err != nil {
+		dbt.fail("prepare", query, err)
+	}
+	return stmt
+}
+
 func runTests(t *testing.T, dsn string, tests ...func(dbt *DBTest)) {
 	db, err := sql.Open("snowflake", dsn)
 	if err != nil {
@@ -251,12 +368,21 @@ func runTests(t *testing.T, dsn string, tests ...func(dbt *DBTest)) {
 	}
 }
 
+func runningOnGithubAction() bool {
+	return os.Getenv("GITHUB_ACTIONS") != ""
+}
+
+func runningOnAWS() bool {
+	return os.Getenv("CLOUD_PROVIDER") == "AWS"
+}
+
 func TestBogusUserPasswordParameters(t *testing.T) {
 	invalidDNS := fmt.Sprintf("%s:%s@%s", "bogus", pass, host)
 	invalidUserPassErrorTests(invalidDNS, t)
 	invalidDNS = fmt.Sprintf("%s:%s@%s", user, "INVALID_PASSWORD", host)
 	invalidUserPassErrorTests(invalidDNS, t)
 }
+
 func invalidUserPassErrorTests(invalidDNS string, t *testing.T) {
 	parameters := url.Values{}
 	if protocol != "" {
@@ -290,9 +416,9 @@ func invalidUserPassErrorTests(invalidDNS string, t *testing.T) {
 
 func TestBogusHostNameParameters(t *testing.T) {
 	invalidDNS := fmt.Sprintf("%s:%s@%s", user, pass, "INVALID_HOST:1234")
-	invalidHostErrorTests(invalidDNS, []string{"no such host", "verify account name is correct", "HTTP Status: 403"}, t)
+	invalidHostErrorTests(invalidDNS, []string{"no such host", "verify account name is correct", "HTTP Status: 403", "Temporary failure in name resolution"}, t)
 	invalidDNS = fmt.Sprintf("%s:%s@%s", user, pass, "INVALID_HOST")
-	invalidHostErrorTests(invalidDNS, []string{"read: connection reset by peer.", "EOF", "verify account name is correct", "HTTP Status: 403"}, t)
+	invalidHostErrorTests(invalidDNS, []string{"read: connection reset by peer", "EOF", "verify account name is correct", "HTTP Status: 403", "Temporary failure in name resolution"}, t)
 }
 
 func invalidHostErrorTests(invalidDNS string, mstr []string, t *testing.T) {
@@ -357,6 +483,19 @@ func TestEmptyQuery(t *testing.T) {
 		err = rows.Scan(&v1)
 		if err != sql.ErrNoRows {
 			dbt.Errorf("should fail. err: %v", err)
+		}
+	})
+}
+
+func TestEmptyQueryWithRequestID(t *testing.T) {
+	runTests(t, dsn, func(dbt *DBTest) {
+		query := "select 1"
+		ctx := WithRequestID(context.Background(), uuid.New())
+		rows := dbt.db.QueryRowContext(ctx, query)
+		var v1 interface{}
+		err := rows.Scan(&v1)
+		if err != nil {
+			dbt.Errorf("should not have failed with valid request id. err: %v", err)
 		}
 	})
 }
@@ -458,14 +597,25 @@ func TestCRUD(t *testing.T) {
 }
 
 func TestInt(t *testing.T) {
+	testInt(t, false)
+}
+
+func TestArrowInt(t *testing.T) {
+	testInt(t, true)
+}
+
+func testInt(t *testing.T, arrow bool) {
 	runTests(t, dsn, func(dbt *DBTest) {
 		types := []string{"INT", "INTEGER"}
 		in := int64(42)
 		var out int64
-		var rows *sql.Rows
+		var rows *RowsExtended
 
 		// SIGNED
 		for _, v := range types {
+			if arrow {
+				dbt.mustExec(forceArrow)
+			}
 			dbt.mustExec("CREATE TABLE test (value " + v + ")")
 			dbt.mustExec("INSERT INTO test VALUES (?)", in)
 			rows = dbt.mustQuery("SELECT value FROM test")
@@ -484,19 +634,79 @@ func TestInt(t *testing.T) {
 	})
 }
 
+type tcBigNum struct {
+	num  string
+	prec int
+	sc   int
+}
+
+func TestArrowBigInt(t *testing.T) {
+	var db *sql.DB
+	var err error
+	if db, err = sql.Open("snowflake", dsn); err != nil {
+		t.Fatalf("failed to open db. %v, err: %v", dsn, err)
+	}
+	dbt := &DBTest{t, db}
+
+	testcases := []tcBigNum{
+		{"10000000000000000000000000000000000000", 38, 0},
+		{"-10000000000000000000000000000000000000", 38, 0},
+		{"12345678901234567890123456789012345678", 38, 0},
+		{"-12345678901234567890123456789012345678", 38, 0},
+		{"99999999999999999999999999999999999999", 38, 0},
+		{"-99999999999999999999999999999999999999", 38, 0},
+	}
+
+	for _, tc := range testcases {
+		dbt.mustExec(forceArrow)
+		rows := dbt.mustQuery(fmt.Sprintf("SELECT %s::NUMBER(%v, %v) AS C", tc.num, tc.prec, tc.sc))
+		if !rows.Next() {
+			dbt.Error("failed to query")
+		}
+		defer rows.Close()
+		var v *big.Int
+		err := rows.Scan(&v)
+		if err != nil {
+			dbt.Errorf("failed to scan. %#v", err)
+		}
+
+		b, ok := new(big.Int).SetString(tc.num, 10)
+		if !ok {
+			dbt.Errorf("failed to convert %v big.Int.", tc.num)
+		}
+		if v.Cmp(b) != 0 {
+			dbt.Errorf("big.Int value mismatch: expected %v, got %v", b, v)
+		}
+	}
+}
+
 func TestFloat32(t *testing.T) {
+	testFloat32(t, false)
+}
+
+func TestArrowFloat32(t *testing.T) {
+	testFloat32(t, true)
+}
+
+func testFloat32(t *testing.T, arrow bool) {
 	runTests(t, dsn, func(dbt *DBTest) {
 		types := [2]string{"FLOAT", "DOUBLE"}
 		in := float32(42.23)
 		var out float32
-		var rows *sql.Rows
+		var rows *RowsExtended
 		for _, v := range types {
+			if arrow {
+				dbt.mustExec(forceArrow)
+			}
 			dbt.mustExec("CREATE TABLE test (value " + v + ")")
 			dbt.mustExec("INSERT INTO test VALUES (?)", in)
 			rows = dbt.mustQuery("SELECT value FROM test")
 			defer rows.Close()
 			if rows.Next() {
-				rows.Scan(&out)
+				err := rows.Scan(&out)
+				if err != nil {
+					dbt.Errorf("failed to scan data: %v", err)
+				}
 				if in != out {
 					dbt.Errorf("%s: %g != %g", v, in, out)
 				}
@@ -509,12 +719,23 @@ func TestFloat32(t *testing.T) {
 }
 
 func TestFloat64(t *testing.T) {
+	testFloat64(t, false)
+}
+
+func TestArrowFloat64(t *testing.T) {
+	testFloat64(t, true)
+}
+
+func testFloat64(t *testing.T, arrow bool) {
 	runTests(t, dsn, func(dbt *DBTest) {
 		types := [2]string{"FLOAT", "DOUBLE"}
 		expected := 42.23
 		var out float64
-		var rows *sql.Rows
+		var rows *RowsExtended
 		for _, v := range types {
+			if arrow {
+				dbt.mustExec(forceArrow)
+			}
 			dbt.mustExec("CREATE TABLE test (value " + v + ")")
 			dbt.mustExec("INSERT INTO test VALUES (42.23)")
 			rows = dbt.mustQuery("SELECT value FROM test")
@@ -532,173 +753,46 @@ func TestFloat64(t *testing.T) {
 	})
 }
 
-func TestFloat64Placeholder(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		types := [2]string{"FLOAT", "DOUBLE"}
-		expected := 42.23
-		var out float64
-		var rows *sql.Rows
-		for _, v := range types {
-			dbt.mustExec(fmt.Sprintf("CREATE TABLE test (id int, value %v)", v))
-			dbt.mustExec("INSERT INTO test VALUES (1, ?)", expected)
-			rows = dbt.mustQuery("SELECT value FROM test WHERE id = ?", 1)
-			defer rows.Close()
-			if rows.Next() {
-				rows.Scan(&out)
-				if expected != out {
-					dbt.Errorf("%s: %g != %g", v, expected, out)
-				}
-			} else {
-				dbt.Errorf("%s: no data", v)
-			}
-			dbt.mustExec("DROP TABLE IF EXISTS test")
-		}
-	})
-}
+func TestArrowBigFloat(t *testing.T) {
+	var db *sql.DB
+	var err error
+	if db, err = sql.Open("snowflake", dsn); err != nil {
+		t.Fatalf("failed to open db. %v, err: %v", dsn, err)
+	}
+	dbt := &DBTest{t, db}
 
-// TestUint64Placeholder tests uint64 binding. Should fail as unit64 is not a supported binding value by Go's sql
-// package.
-func TestUint64Placeholder(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		types := []string{"INTEGER"}
-		expected := uint64(18446744073709551615)
-		for _, v := range types {
-			dbt.mustExec(fmt.Sprintf("CREATE TABLE test (id int, value %v)", v))
-			_, err := dbt.db.Exec("INSERT INTO test VALUES (1, ?)", expected)
-			if err == nil {
-				dbt.Fatal("should fail as uint64 values with high bit set are not supported.")
-			} else {
-				glog.V(2).Infof("expected err: %v", err)
-			}
-			dbt.mustExec("DROP TABLE IF EXISTS test")
-		}
-	})
-}
+	testcases := []tcBigNum{
+		{"1.23", 30, 2},
+		{"1.0000000000000000000000000000000000000", 38, 37},
+		{"-1.0000000000000000000000000000000000000", 38, 37},
+		{"1.2345678901234567890123456789012345678", 38, 37},
+		{"-1.2345678901234567890123456789012345678", 38, 37},
+		{"9.9999999999999999999999999999999999999", 38, 37},
+		{"-9.9999999999999999999999999999999999999", 38, 37},
+	}
 
-func TestDateTimeTimestampPlaceholder(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		expected := time.Now()
-		dbt.mustExec(
-			"CREATE OR REPLACE TABLE tztest (id int, ntz timestamp_ntz, ltz timestamp_ltz, dt date, tm time)")
-		stmt, err := dbt.db.Prepare("INSERT INTO tztest(id,ntz,ltz,dt,tm) VALUES(1,?,?,?,?)")
-		if err != nil {
-			dbt.Fatal(err.Error())
-		}
-		defer stmt.Close()
-		_, err = stmt.Exec(
-			DataTypeTimestampNtz, expected,
-			DataTypeTimestampLtz, expected,
-			DataTypeDate, expected,
-			DataTypeTime, expected)
-		if err != nil {
-			dbt.Fatal(err)
-		}
-		rows := dbt.mustQuery("SELECT ntz,ltz,dt,tm FROM tztest WHERE id=?", 1)
-		defer rows.Close()
-		var ntz, vltz, dt, tm time.Time
-		columnTypes, err := rows.ColumnTypes()
-		if err != nil {
-			dbt.Errorf("column type error. err: %v", err)
-		}
-		if columnTypes[0].Name() != "NTZ" {
-			dbt.Errorf("expected column name: %v, got: %v", "TEST", columnTypes[0])
-		}
-		canNull := dbt.mustNullable(columnTypes[0])
-		if !canNull {
-			dbt.Errorf("expected nullable: %v, got: %v", true, canNull)
-		}
-		if columnTypes[0].DatabaseTypeName() != "TIMESTAMP_NTZ" {
-			dbt.Errorf("expected database type: %v, got: %v", "TIMESTAMP_NTZ", columnTypes[0].DatabaseTypeName())
-		}
-		dbt.mustFailDecimalSize(columnTypes[0])
-		dbt.mustFailLength(columnTypes[0])
-		cols, err := rows.Columns()
-		if err != nil {
-			dbt.Errorf("failed to get columns. err: %v", err)
-		}
-		if len(cols) != 4 || cols[0] != "NTZ" || cols[1] != "LTZ" || cols[2] != "DT" || cols[3] != "TM" {
-			dbt.Errorf("failed to get columns. got: %v", cols)
-		}
-		if rows.Next() {
-			rows.Scan(&ntz, &vltz, &dt, &tm)
-			if expected.UnixNano() != ntz.UnixNano() {
-				dbt.Errorf("returned TIMESTAMP_NTZ value didn't match. expected: %v:%v, got: %v:%v",
-					expected.UnixNano(), expected, ntz.UnixNano(), ntz)
-			}
-			if expected.UnixNano() != vltz.UnixNano() {
-				dbt.Errorf("returned TIMESTAMP_LTZ value didn't match. expected: %v:%v, got: %v:%v",
-					expected.UnixNano(), expected, vltz.UnixNano(), vltz)
-			}
-			if expected.Year() != dt.Year() || expected.Month() != dt.Month() || expected.Day() != dt.Day() {
-				dbt.Errorf("returned DATE value didn't match. expected: %v:%v, got: %v:%v",
-					expected.Unix()*1000, expected, dt.Unix()*1000, dt)
-			}
-			if expected.Hour() != tm.Hour() || expected.Minute() != tm.Minute() || expected.Second() != tm.Second() || expected.Nanosecond() != tm.Nanosecond() {
-				dbt.Errorf("returned TIME value didn't match. expected: %v:%v, got: %v:%v",
-					expected.UnixNano(), expected, tm.UnixNano(), tm)
-			}
-		} else {
-			dbt.Error("no data")
-		}
-		dbt.mustExec("DROP TABLE tztest")
-	})
-}
-
-func TestBinaryPlaceholder(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE OR REPLACE TABLE bintest (id int, b binary)")
-		var b = []byte{0x01, 0x02, 0x03}
-		dbt.mustExec("INSERT INTO bintest(id,b) VALUES(1, ?)", DataTypeBinary, b)
-		rows := dbt.mustQuery("SELECT b FROM bintest WHERE id=?", 1)
-		defer rows.Close()
-		if rows.Next() {
-			var rb []byte
-			if err := rows.Scan(&rb); err != nil {
-				dbt.Errorf("failed to scan data. err: %v", err)
-			}
-			if !bytes.Equal(b, rb) {
-				dbt.Errorf("failed to match data. expected: %v, got: %v", b, rb)
-			}
-		} else {
-			dbt.Errorf("no data")
-		}
-		dbt.mustExec("DROP TABLE bintest")
-	})
-}
-
-func TestBindingInterface(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		var err error
-		rows := dbt.mustQuery(
-			"SELECT 1.0::NUMBER(30,2) as C1, 2::NUMBER(38,0) AS C2, 't3' AS C3, 4.2::DOUBLE AS C4, 'abcd'::BINARY AS C5, true AS C6")
-		defer rows.Close()
+	for _, tc := range testcases {
+		dbt.mustExec(forceArrow)
+		rows := dbt.mustQuery(fmt.Sprintf("SELECT %s::NUMBER(%v, %v) AS C", tc.num, tc.prec, tc.sc))
 		if !rows.Next() {
 			dbt.Error("failed to query")
 		}
-		var v1, v2, v3, v4, v5, v6 interface{}
-		err = rows.Scan(&v1, &v2, &v3, &v4, &v5, &v6)
+		defer rows.Close()
+		var v *big.Float
+		err := rows.Scan(&v)
 		if err != nil {
-			dbt.Errorf("failed to scan: %#v", err)
+			dbt.Errorf("failed to scan. %#v", err)
 		}
-		var s string
-		var ok bool
-		s, ok = v1.(string)
-		if !ok || s != "1.00" {
-			dbt.Fatalf("failed to fetch. ok: %v, value: %v", ok, v1)
+
+		prec := v.Prec()
+		b, ok := new(big.Float).SetPrec(prec).SetString(tc.num)
+		if !ok {
+			dbt.Errorf("failed to convert %v to big.Float.", tc.num)
 		}
-		s, ok = v2.(string)
-		if !ok || s != "2" {
-			dbt.Fatalf("failed to fetch. ok: %v, value: %v", ok, v2)
+		if v.Cmp(b) != 0 {
+			dbt.Errorf("big.Float value mismatch: expected %v, got %v", b, v)
 		}
-		s, ok = v3.(string)
-		if !ok || s != "t3" {
-			dbt.Fatalf("failed to fetch. ok: %v, value: %v", ok, v3)
-		}
-		s, ok = v4.(string)
-		if !ok || s != "4.2" {
-			dbt.Fatalf("failed to fetch. ok: %v, value: %v", ok, v4)
-		}
-	})
+	}
 }
 
 func TestVariousTypes(t *testing.T) {
@@ -812,42 +906,135 @@ func TestVariousTypes(t *testing.T) {
 	})
 }
 
-func TestTimestampTZPlaceholder(t *testing.T) {
+func TestArrowVariousTypes(t *testing.T) {
 	runTests(t, dsn, func(dbt *DBTest) {
-		expected := time.Now()
-		dbt.mustExec("CREATE OR REPLACE TABLE tztest (id int, tz timestamp_tz)")
-		stmt, err := dbt.db.Prepare("INSERT INTO tztest(id,tz) VALUES(1, ?)")
-		if err != nil {
-			dbt.Fatal(err.Error())
-		}
-		defer stmt.Close()
-		_, err = stmt.Exec(DataTypeTimestampTz, expected)
-		if err != nil {
-			dbt.Fatal(err)
-		}
-		rows := dbt.mustQuery("SELECT tz FROM tztest WHERE id=?", 1)
+		dbt.mustExec(forceArrow)
+		rows := dbt.mustQuery(
+			"SELECT 1.0::NUMBER(30,2) as C1, 2::NUMBER(38,0) AS C2, 't3' AS C3, 4.2::DOUBLE AS C4, 'abcd'::BINARY AS C5, true AS C6")
 		defer rows.Close()
-		var v time.Time
-		if rows.Next() {
-			rows.Scan(&v)
-			if expected.UnixNano() != v.UnixNano() {
-				dbt.Errorf("returned value didn't match. expected: %v:%v, got: %v:%v",
-					expected.UnixNano(), expected, v.UnixNano(), v)
-			}
-			// fmt.Printf("returned value: %v, %v, %v\n", v, v.UnixNano(), expected.UnixNano())
-		} else {
-			dbt.Error("no data")
+		if !rows.Next() {
+			dbt.Error("failed to query")
 		}
-		dbt.mustExec("DROP TABLE tztest")
+		cc, err := rows.Columns()
+		if err != nil {
+			dbt.Errorf("columns: %v", cc)
+		}
+		ct, err := rows.ColumnTypes()
+		if err != nil {
+			dbt.Errorf("column types: %v", ct)
+		}
+		var v1 *big.Float
+		var v2 int
+		var v3 string
+		var v4 float64
+		var v5 []byte
+		var v6 bool
+		err = rows.Scan(&v1, &v2, &v3, &v4, &v5, &v6)
+		if err != nil {
+			dbt.Errorf("failed to scan: %#v", err)
+		}
+		if v1.Cmp(big.NewFloat(1.0)) != 0 {
+			dbt.Errorf("failed to scan. %#v", *v1)
+		}
+		if ct[0].Name() != "C1" || ct[1].Name() != "C2" || ct[2].Name() != "C3" || ct[3].Name() != "C4" || ct[4].Name() != "C5" || ct[5].Name() != "C6" {
+			dbt.Errorf("failed to get column names: %#v", ct)
+		}
+		if ct[0].ScanType() != reflect.TypeOf(float64(0)) {
+			dbt.Errorf("failed to get scan type. expected: %v, got: %v", reflect.TypeOf(float64(0)), ct[0].ScanType())
+		}
+		if ct[1].ScanType() != reflect.TypeOf(int64(0)) {
+			dbt.Errorf("failed to get scan type. expected: %v, got: %v", reflect.TypeOf(int64(0)), ct[1].ScanType())
+		}
+		var pr, sc int64
+		var cLen int64
+		var canNull bool
+		pr, sc = dbt.mustDecimalSize(ct[0])
+		if pr != 30 || sc != 2 {
+			dbt.Errorf("failed to get precision and scale. %#v", ct[0])
+		}
+		dbt.mustFailLength(ct[0])
+		canNull = dbt.mustNullable(ct[0])
+		if canNull {
+			dbt.Errorf("failed to get nullable. %#v", ct[0])
+		}
+		if cLen != 0 {
+			dbt.Errorf("failed to get length. %#v", ct[0])
+		}
+		if v2 != 2 {
+			dbt.Errorf("failed to scan. %#v", v2)
+		}
+		pr, sc = dbt.mustDecimalSize(ct[1])
+		if pr != 38 || sc != 0 {
+			dbt.Errorf("failed to get precision and scale. %#v", ct[1])
+		}
+		dbt.mustFailLength(ct[1])
+		canNull = dbt.mustNullable(ct[1])
+		if canNull {
+			dbt.Errorf("failed to get nullable. %#v", ct[1])
+		}
+		if v3 != "t3" {
+			dbt.Errorf("failed to scan. %#v", v3)
+		}
+		dbt.mustFailDecimalSize(ct[2])
+		cLen = dbt.mustLength(ct[2])
+		if cLen != 2 {
+			dbt.Errorf("failed to get length. %#v", ct[2])
+		}
+		canNull = dbt.mustNullable(ct[2])
+		if canNull {
+			dbt.Errorf("failed to get nullable. %#v", ct[2])
+		}
+		if v4 != 4.2 {
+			dbt.Errorf("failed to scan. %#v", v4)
+		}
+		dbt.mustFailDecimalSize(ct[3])
+		dbt.mustFailLength(ct[3])
+		canNull = dbt.mustNullable(ct[3])
+		if canNull {
+			dbt.Errorf("failed to get nullable. %#v", ct[3])
+		}
+		if !bytes.Equal(v5, []byte{0xab, 0xcd}) {
+			dbt.Errorf("failed to scan. %#v", v5)
+		}
+		dbt.mustFailDecimalSize(ct[4])
+		cLen = dbt.mustLength(ct[4]) // BINARY
+		if cLen != 8388608 {
+			dbt.Errorf("failed to get length. %#v", ct[4])
+		}
+		canNull = dbt.mustNullable(ct[4])
+		if canNull {
+			dbt.Errorf("failed to get nullable. %#v", ct[4])
+		}
+		if !v6 {
+			dbt.Errorf("failed to scan. %#v", v6)
+		}
+		dbt.mustFailDecimalSize(ct[5])
+		dbt.mustFailLength(ct[5])
+		/*canNull = dbt.mustNullable(ct[5])
+		if canNull {
+			dbt.Errorf("failed to get nullable. %#v", ct[5])
+		}*/
+
 	})
 }
 
 func TestString(t *testing.T) {
+	testString(t, false)
+}
+
+func TestArrowString(t *testing.T) {
+	testString(t, true)
+}
+
+func testString(t *testing.T, arrow bool) {
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		types := []string{"CHAR(255)", "VARCHAR(255)", "TEXT", "STRING"}
 		in := "κόσμε üöäßñóùéàâÿœ'îë Árvíztűrő いろはにほへとちりぬるを イロハニホヘト דג סקרן чащах  น่าฟังเอย"
 		var out string
-		var rows *sql.Rows
+		var rows *RowsExtended
 
 		for _, v := range types {
 			dbt.mustExec("CREATE TABLE test (value " + v + ")")
@@ -907,7 +1094,7 @@ func (tt timeTest) genQuery() string {
 }
 
 func (tt timeTest) run(t *testing.T, dbt *DBTest, dbtype, tlayout string) {
-	var rows *sql.Rows
+	var rows *RowsExtended
 	query := fmt.Sprintf(tt.genQuery(), tt.s, dbtype)
 	rows = dbt.mustQuery(query)
 	defer rows.Close()
@@ -939,9 +1126,10 @@ func (tt timeTest) run(t *testing.T, dbt *DBTest, dbtype, tlayout string) {
 			str,
 		)
 	case time.Time:
-		if val == tt.t {
+		if val.UnixNano() == tt.t.UnixNano() {
 			return
 		}
+		fmt.Println(val.UnixNano(), tt.t.UnixNano())
 		t.Logf("source:%v, expected: %v, got:%v", tt.s, tt.t, val)
 		dbt.Errorf("%s to string: expected %q, got %q",
 			dbtype,
@@ -957,7 +1145,15 @@ func (tt timeTest) run(t *testing.T, dbt *DBTest, dbtype, tlayout string) {
 }
 
 func TestSimpleDateTimeTimestampFetch(t *testing.T) {
-	var scan = func(rows *sql.Rows, cd interface{}, ct interface{}, cts interface{}) {
+	testSimpleDateTimeTimestampFetch(t, false)
+}
+
+func TestArrowSimpleDateTimeTimestampFetch(t *testing.T) {
+	testSimpleDateTimeTimestampFetch(t, true)
+}
+
+func testSimpleDateTimeTimestampFetch(t *testing.T, arrow bool) {
+	var scan = func(rows *RowsExtended, cd interface{}, ct interface{}, cts interface{}) {
 		err := rows.Scan(cd, ct, cts)
 		if err != nil {
 			t.Fatal(err)
@@ -965,17 +1161,20 @@ func TestSimpleDateTimeTimestampFetch(t *testing.T) {
 		// fmt.Printf("cd: %v, ct: %v, cts: %v", cd, ct, cts)
 		// no error should occurs
 	}
-	var fetchTypes = []func(*sql.Rows){
-		func(rows *sql.Rows) {
+	var fetchTypes = []func(*RowsExtended){
+		func(rows *RowsExtended) {
 			var cd, ct, cts time.Time
 			scan(rows, &cd, &ct, &cts)
 		},
-		func(rows *sql.Rows) {
+		func(rows *RowsExtended) {
 			var cd, ct, cts time.Time
 			scan(rows, &cd, &ct, &cts)
 		},
 	}
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		for _, f := range fetchTypes {
 			rows := dbt.mustQuery("SELECT CURRENT_DATE(), CURRENT_TIME(), CURRENT_TIMESTAMP()")
 			defer rows.Close()
@@ -989,6 +1188,14 @@ func TestSimpleDateTimeTimestampFetch(t *testing.T) {
 }
 
 func TestDateTime(t *testing.T) {
+	testDateTime(t, false)
+}
+
+func TestArrowDateTime(t *testing.T) {
+	testDateTime(t, true)
+}
+
+func testDateTime(t *testing.T, arrow bool) {
 	afterTime := func(t time.Time, d string) time.Time {
 		dur, err := time.ParseDuration(d)
 		if err != nil {
@@ -996,15 +1203,12 @@ func TestDateTime(t *testing.T) {
 		}
 		return t.Add(dur)
 	}
-	format := "2006-01-02 15:04:05.999999999"
 	t0 := time.Time{}
 	tstr0 := "0000-00-00 00:00:00.000000000"
 	testcases := []tcDateTimeTimestamp{
 		{"DATE", format[:10], []timeTest{
 			{t: time.Date(2011, 11, 20, 0, 0, 0, 0, time.UTC)},
 			{t: time.Date(2, 8, 2, 0, 0, 0, 0, time.UTC), s: "0002-08-02"},
-			// 0000-00-00 is not supported but returns a consistent result
-			{t: time.Date(2, 11, 30, 0, 0, 0, 0, time.UTC), s: "0000-00-00"},
 		}},
 		{"TIME", format[11:19], []timeTest{
 			{t: afterTime(t0, "12345s")},
@@ -1038,6 +1242,9 @@ func TestDateTime(t *testing.T) {
 		}},
 	}
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		for _, setups := range testcases {
 			for _, setup := range setups.tests {
 				if setup.s == "" {
@@ -1051,7 +1258,20 @@ func TestDateTime(t *testing.T) {
 }
 
 func TestTimestampLTZ(t *testing.T) {
-	format := "2006-01-02 15:04:05.999999999"
+	testTimestampLTZ(t, false)
+}
+
+func TestArrowTimestampLTZ(t *testing.T) {
+	testTimestampLTZ(t, true)
+}
+
+func testTimestampLTZ(t *testing.T, arrow bool) {
+	// Set session time zone in Los Angeles, same as machine
+	createDSN("America/Los_Angeles")
+	location, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Error(err)
+	}
 	testcases := []tcDateTimeTimestamp{
 		{
 			dbtype:  "TIMESTAMP_LTZ(9)",
@@ -1059,23 +1279,27 @@ func TestTimestampLTZ(t *testing.T) {
 			tests: []timeTest{
 				{
 					s: "2016-12-30 05:02:03",
-					t: time.Date(2016, 12, 30, 5, 2, 3, 0, time.Local),
+					t: time.Date(2016, 12, 30, 5, 2, 3, 0, location),
+				},
+				{
+					s: "2016-12-30 05:02:03 -00:00",
+					t: time.Date(2016, 12, 30, 5, 2, 3, 0, time.UTC),
 				},
 				{
 					s: "2017-05-12 00:51:42",
-					t: time.Date(2017, 5, 12, 0, 51, 42, 0, time.Local),
+					t: time.Date(2017, 5, 12, 0, 51, 42, 0, location),
 				},
 				{
 					s: "2017-03-12 01:00:00",
-					t: time.Date(2017, 3, 12, 1, 0, 0, 0, time.Local),
+					t: time.Date(2017, 3, 12, 1, 0, 0, 0, location),
 				},
 				{
 					s: "2017-03-13 04:00:00",
-					t: time.Date(2017, 3, 13, 4, 0, 0, 0, time.Local),
+					t: time.Date(2017, 3, 13, 4, 0, 0, 0, location),
 				},
 				{
 					s: "2017-03-13 04:00:00.123456789",
-					t: time.Date(2017, 3, 13, 4, 0, 0, 123456789, time.Local),
+					t: time.Date(2017, 3, 13, 4, 0, 0, 123456789, location),
 				},
 			},
 		},
@@ -1085,12 +1309,15 @@ func TestTimestampLTZ(t *testing.T) {
 			tests: []timeTest{
 				{
 					s: "2017-03-13 04:00:00.123456789",
-					t: time.Date(2017, 3, 13, 4, 0, 0, 123456780, time.Local),
+					t: time.Date(2017, 3, 13, 4, 0, 0, 123456780, location),
 				},
 			},
 		},
 	}
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		for _, setups := range testcases {
 			for _, setup := range setups.tests {
 				if setup.s == "" {
@@ -1101,9 +1328,19 @@ func TestTimestampLTZ(t *testing.T) {
 			}
 		}
 	})
+	// Revert timezone to UTC, which is default for the test suit
+	createDSN("UTC")
 }
 
 func TestTimestampTZ(t *testing.T) {
+	testTimestampTZ(t, false)
+}
+
+func TestArrowTimestampTZ(t *testing.T) {
+	testTimestampTZ(t, true)
+}
+
+func testTimestampTZ(t *testing.T, arrow bool) {
 	sflo := func(offsets string) (loc *time.Location) {
 		r, err := LocationWithOffsetString(offsets)
 		if err != nil {
@@ -1111,7 +1348,6 @@ func TestTimestampTZ(t *testing.T) {
 		}
 		return r
 	}
-	format := "2006-01-02 15:04:05.999999999"
 	testcases := []tcDateTimeTimestamp{
 		{
 			dbtype:  "TIMESTAMP_TZ(9)",
@@ -1131,6 +1367,9 @@ func TestTimestampTZ(t *testing.T) {
 		},
 	}
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		for _, setups := range testcases {
 			for _, setup := range setups.tests {
 				if setup.s == "" {
@@ -1144,7 +1383,18 @@ func TestTimestampTZ(t *testing.T) {
 }
 
 func TestNULL(t *testing.T) {
+	testNULL(t, false)
+}
+
+func TestArrowNULL(t *testing.T) {
+	testNULL(t, true)
+}
+
+func testNULL(t *testing.T, arrow bool) {
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		nullStmt, err := dbt.db.Prepare("SELECT NULL")
 		if err != nil {
 			dbt.Fatal(err)
@@ -1296,7 +1546,18 @@ func TestNULL(t *testing.T) {
 }
 
 func TestVariant(t *testing.T) {
+	testVariant(t, false)
+}
+
+func TestArrowVariant(t *testing.T) {
+	testVariant(t, true)
+}
+
+func testVariant(t *testing.T, arrow bool) {
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		rows := dbt.mustQuery(`select parse_json('[{"id":1, "name":"test1"},{"id":2, "name":"test2"}]')`)
 		defer rows.Close()
 		var v string
@@ -1312,7 +1573,18 @@ func TestVariant(t *testing.T) {
 }
 
 func TestArray(t *testing.T) {
+	testArray(t, false)
+}
+
+func TestArrowArray(t *testing.T) {
+	testArray(t, true)
+}
+
+func testArray(t *testing.T, arrow bool) {
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		rows := dbt.mustQuery(`select as_array(parse_json('[{"id":1, "name":"test1"},{"id":2, "name":"test2"}]'))`)
 		defer rows.Close()
 		var v string
@@ -1329,17 +1601,24 @@ func TestArray(t *testing.T) {
 
 func TestLargeSetResult(t *testing.T) {
 	CustomJSONDecoderEnabled = false
-	testLargeSetResult(t, 100000)
+	testLargeSetResult(t, 100000, false)
 }
 
 func TestLargeSetResultWithCustomJSONDecoder(t *testing.T) {
 	CustomJSONDecoderEnabled = true
 	// less number of rows to avoid Travis timeout
-	testLargeSetResult(t, 20000)
+	testLargeSetResult(t, 20000, false)
 }
 
-func testLargeSetResult(t *testing.T, numrows int) {
+func TestLargeSetResultWithArrowDecoder(t *testing.T) {
+	testLargeSetResult(t, 10000, true)
+}
+
+func testLargeSetResult(t *testing.T, numrows int, arrow bool) {
 	runTests(t, dsn, func(dbt *DBTest) {
+		if arrow {
+			dbt.mustExec(forceArrow)
+		}
 		rows := dbt.mustQuery(fmt.Sprintf("SELECT SEQ8(), RANDSTR(1000, RANDOM()) FROM TABLE(GENERATOR(ROWCOUNT=>%v))", numrows))
 		defer rows.Close()
 		cnt := 0
@@ -1350,13 +1629,9 @@ func testLargeSetResult(t *testing.T, numrows int) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if cnt%1000 == 0 {
-				glog.V(2).Infof("%v, %v", idx, v)
-				glog.V(2).Infof("NextResultSet: %v", rows.NextResultSet())
-			}
 			cnt++
 		}
-		glog.V(2).Infof("NextResultSet: %v", rows.NextResultSet())
+		logger.Infof("NextResultSet: %v", rows.NextResultSet())
 
 		if cnt != numrows {
 			dbt.Errorf("number of rows didn't match. expected: %v, got: %v", numrows, cnt)
@@ -1711,6 +1986,7 @@ func TestLargeSetResultCancel(t *testing.T) {
 		if ret.Error() != "context canceled" {
 			t.Fatalf("failed to cancel. err: %v", ret)
 		}
+		close(c)
 	})
 }
 
@@ -1725,26 +2001,25 @@ func TestValidateDatabaseParameter(t *testing.T) {
 	testcases := []tcValidateDatabaseParameter{
 		{
 			dsn:       baseDSN + fmt.Sprintf("/%s/%s", "NOT_EXISTS", "NOT_EXISTS"),
-			errorCode: ErrCodeObjectNotExists,
+			errorCode: ErrObjectNotExistOrAuthorized,
 		},
 		{
 			dsn:       baseDSN + fmt.Sprintf("/%s/%s", dbname, "NOT_EXISTS"),
-			errorCode: ErrCodeObjectNotExists,
+			errorCode: ErrObjectNotExistOrAuthorized,
 		},
 		{
 			dsn: baseDSN + fmt.Sprintf("/%s/%s", dbname, schemaname),
 			params: map[string]string{
 				"warehouse": "NOT_EXIST",
 			},
-			errorCode: ErrCodeObjectNotExists,
+			errorCode: ErrObjectNotExistOrAuthorized,
 		},
 		{
 			dsn: baseDSN + fmt.Sprintf("/%s/%s", dbname, schemaname),
 			params: map[string]string{
 				"role": "NOT_EXIST",
 			},
-			//FIXME This is magic number that should be avoided
-			errorCode: 390189, // this already exists
+			errorCode: ErrRoleNotExist,
 		},
 	}
 	for idx, tc := range testcases {
@@ -1827,12 +2102,12 @@ func TestPingInvalidHost(t *testing.T) {
 		LoginTimeout: 10 * time.Second,
 	}
 
-	url, err := DSN(&config)
+	testURL, err := DSN(&config)
 	if err != nil {
 		t.Fatalf("failed to parse config. config: %v, err: %v", config, err)
 	}
 
-	db, err := sql.Open("snowflake", url)
+	db, err := sql.Open("snowflake", testURL)
 	if err != nil {
 		t.Fatalf("failed to initalize the connetion. err: %v", err)
 	}
@@ -1845,6 +2120,67 @@ func TestPingInvalidHost(t *testing.T) {
 
 	if !ok || ok && driverErr.Number != ErrCodeFailedToConnect { // Failed to connect error
 		t.Fatalf("error didn't match")
+	}
+}
+
+func TestOpenWithConfig(t *testing.T) {
+	config, err := ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("failed to parse dsn. dsn: %v, err: %v", dsn, err)
+	}
+	driver := SnowflakeDriver{}
+	db, err := driver.OpenWithConfig(context.Background(), *config)
+	if err != nil {
+		t.Fatalf("failed to open with config. config: %v, err: %v", config, err)
+	}
+	db.Close()
+}
+
+type CountingTransport struct {
+	requests int
+}
+
+func (t *CountingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	t.requests++
+	return snowflakeInsecureTransport.RoundTrip(r)
+}
+
+func TestOpenWithTransport(t *testing.T) {
+	config, err := ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("failed to parse dsn. dsn: %v, err: %v", dsn, err)
+	}
+	countingTransport := CountingTransport{}
+	var transport http.RoundTripper = &countingTransport
+	config.Transporter = transport
+	driver := SnowflakeDriver{}
+	db, err := driver.OpenWithConfig(context.Background(), *config)
+	if err != nil {
+		t.Fatalf("failed to open with config. config: %v, err: %v", config, err)
+	}
+	conn := db.(*snowflakeConn)
+	if conn.rest.Client.Transport != transport {
+		t.Fatal("transport doesn't match")
+	}
+	db.Close()
+	if countingTransport.requests == 0 {
+		t.Fatal("transport did not receive any requests")
+	}
+
+	// Test that transport override also works in insecure mode
+	countingTransport.requests = 0
+	config.InsecureMode = true
+	db, err = driver.OpenWithConfig(context.Background(), *config)
+	if err != nil {
+		t.Fatalf("failed to open with config. config: %v, err: %v", config, err)
+	}
+	conn = db.(*snowflakeConn)
+	if conn.rest.Client.Transport != transport {
+		t.Fatal("transport doesn't match")
+	}
+	db.Close()
+	if countingTransport.requests == 0 {
+		t.Fatal("transport did not receive any requests")
 	}
 }
 
@@ -1869,6 +2205,7 @@ func createDSNWithClientSessionKeepAlive() {
 		dsn += "?" + parameters.Encode()
 	}
 }
+
 func TestClientSessionKeepAliveParameter(t *testing.T) {
 	// This test doesn't really validate the CLIENT_SESSION_KEEP_ALIVE functionality but simply checks
 	// the session parameter.
@@ -1904,8 +2241,27 @@ func TestClientSessionKeepAliveParameter(t *testing.T) {
 	defer rows.Close()
 }
 
-func init() {
-	if !flag.Parsed() {
-		flag.Parse()
+func TestTimePrecision(t *testing.T) {
+	var db *sql.DB
+	var err error
+
+	if db, err = sql.Open("snowflake", dsn); err != nil {
+		t.Fatalf("failed to open db. %v, err: %v", dsn, err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec("create or replace table z3 (t1 time(5))")
+	if err != nil {
+		t.Errorf("error while executing query. err : %v", err)
+	}
+	res, err := db.Query("select * from z3")
+	if err != nil {
+		t.Errorf("error while executing query. err : %v", err)
+	}
+
+	cols, _ := res.ColumnTypes()
+	pres, _, _ := cols[0].DecimalSize()
+	if pres != 5 {
+		t.Fatalf("Wrong value returned. Got %v instead of 5.", pres)
 	}
 }

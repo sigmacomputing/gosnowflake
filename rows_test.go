@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2018 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2021 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
@@ -33,20 +33,18 @@ func TestRowsWithoutChunkDownloader(t *testing.T) {
 	cm := []execResponseChunk{}
 	rows := new(snowflakeRows)
 	rows.sc = nil
-	rows.RowType = rt
 	rows.ChunkDownloader = &snowflakeChunkDownloader{
 		sc:                 nil,
 		ctx:                context.Background(),
-		CurrentChunk:       cc,
 		Total:              int64(len(cc)),
 		ChunkMetas:         cm,
 		TotalRowIndex:      int64(-1),
 		Qrmk:               "",
 		FuncDownload:       nil,
 		FuncDownloadHelper: nil,
+		RowSet:             rowSetType{RowType: rt, JSON: cc},
 	}
 	rows.ChunkDownloader.start()
-	// var dest []driver.Value
 	dest := make([]driver.Value, 2)
 	for i = 0; i < len(cc); i++ {
 		err := rows.Next(dest)
@@ -64,7 +62,7 @@ func TestRowsWithoutChunkDownloader(t *testing.T) {
 	if err != io.EOF {
 		t.Fatalf("failed to finish getting data. err: %v", err)
 	}
-	glog.V(2).Infof("dest: %v", dest)
+	logger.Infof("dest: %v", dest)
 
 }
 
@@ -76,7 +74,8 @@ func downloadChunkTest(ctx context.Context, scd *snowflakeChunkDownloader, idx i
 		d = append(d, []*string{&v1, &v2})
 	}
 	scd.ChunksMutex.Lock()
-	scd.Chunks[idx] = d
+	scd.Chunks[idx] = make([]chunkRowType, len(d))
+	populateJSONRowSet(scd.Chunks[idx], d)
 	scd.DoneDownloadCond.Broadcast()
 	scd.ChunksMutex.Unlock()
 }
@@ -86,7 +85,7 @@ func TestRowsWithChunkDownloader(t *testing.T) {
 	// changed the workers
 	backupMaxChunkDownloadWorkers := MaxChunkDownloadWorkers
 	MaxChunkDownloadWorkers = 2
-	glog.V(2).Info("START TESTS")
+	logger.Info("START TESTS")
 	var i int
 	cc := make([][]*string, 0)
 	for i = 0; i < 100; i++ {
@@ -104,16 +103,15 @@ func TestRowsWithChunkDownloader(t *testing.T) {
 	}
 	rows := new(snowflakeRows)
 	rows.sc = nil
-	rows.RowType = rt
 	rows.ChunkDownloader = &snowflakeChunkDownloader{
 		sc:            nil,
 		ctx:           context.Background(),
-		CurrentChunk:  cc,
 		Total:         int64(len(cc) + numChunks*rowsInChunk),
 		ChunkMetas:    cm,
 		TotalRowIndex: int64(-1),
 		Qrmk:          "HAHAHA",
 		FuncDownload:  downloadChunkTest,
+		RowSet:        rowSetType{RowType: rt, JSON: cc},
 	}
 	rows.ChunkDownloader.start()
 	cnt := 0
@@ -127,15 +125,14 @@ func TestRowsWithChunkDownloader(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get value. err: %v", err)
 		}
-		// fmt.Printf("data: %v\n", dest)
 		cnt++
 	}
 	if cnt != len(cc)+numChunks*rowsInChunk {
 		t.Fatalf("failed to get all results. expected:%v, got:%v", len(cc)+numChunks*rowsInChunk, cnt)
 	}
-	glog.V(2).Infof("dest: %v", dest)
+	logger.Infof("dest: %v", dest)
 	MaxChunkDownloadWorkers = backupMaxChunkDownloadWorkers
-	glog.V(2).Info("END TESTS")
+	logger.Info("END TESTS")
 }
 
 func downloadChunkTestError(ctx context.Context, scd *snowflakeChunkDownloader, idx int) {
@@ -157,7 +154,8 @@ func downloadChunkTestError(ctx context.Context, scd *snowflakeChunkDownloader, 
 		v2 := fmt.Sprintf("testchunk%v", idx*1000+i)
 		d = append(d, []*string{&v1, &v2})
 	}
-	scd.Chunks[idx] = d
+	scd.Chunks[idx] = make([]chunkRowType, len(d))
+	populateJSONRowSet(scd.Chunks[idx], d)
 	scd.DoneDownloadCond.Broadcast()
 }
 
@@ -166,7 +164,7 @@ func TestRowsWithChunkDownloaderError(t *testing.T) {
 	// changed the workers
 	backupMaxChunkDownloadWorkers := MaxChunkDownloadWorkers
 	MaxChunkDownloadWorkers = 3
-	glog.V(2).Info("START TESTS")
+	logger.Info("START TESTS")
 	var i int
 	cc := make([][]*string, 0)
 	for i = 0; i < 100; i++ {
@@ -184,16 +182,15 @@ func TestRowsWithChunkDownloaderError(t *testing.T) {
 	}
 	rows := new(snowflakeRows)
 	rows.sc = nil
-	rows.RowType = rt
 	rows.ChunkDownloader = &snowflakeChunkDownloader{
 		sc:            nil,
 		ctx:           context.Background(),
-		CurrentChunk:  cc,
 		Total:         int64(len(cc) + numChunks*rowsInChunk),
 		ChunkMetas:    cm,
 		TotalRowIndex: int64(-1),
 		Qrmk:          "HOHOHO",
 		FuncDownload:  downloadChunkTestError,
+		RowSet:        rowSetType{RowType: rt, JSON: cc},
 	}
 	rows.ChunkDownloader.start()
 	cnt := 0
@@ -213,9 +210,9 @@ func TestRowsWithChunkDownloaderError(t *testing.T) {
 	if cnt != len(cc)+numChunks*rowsInChunk {
 		t.Fatalf("failed to get all results. expected:%v, got:%v", len(cc)+numChunks*rowsInChunk, cnt)
 	}
-	glog.V(2).Infof("dest: %v", dest)
+	logger.Infof("dest: %v", dest)
 	MaxChunkDownloadWorkers = backupMaxChunkDownloadWorkers
-	glog.V(2).Info("END TESTS")
+	logger.Info("END TESTS")
 }
 
 func downloadChunkTestErrorFail(ctx context.Context, scd *snowflakeChunkDownloader, idx int) {
@@ -237,14 +234,15 @@ func downloadChunkTestErrorFail(ctx context.Context, scd *snowflakeChunkDownload
 		v2 := fmt.Sprintf("testchunk%v", idx*1000+i)
 		d = append(d, []*string{&v1, &v2})
 	}
-	scd.Chunks[idx] = d
+	scd.Chunks[idx] = make([]chunkRowType, len(d))
+	populateJSONRowSet(scd.Chunks[idx], d)
 	scd.DoneDownloadCond.Broadcast()
 }
 
 func TestRowsWithChunkDownloaderErrorFail(t *testing.T) {
 	numChunks := 12
 	// changed the workers
-	glog.V(2).Info("START TESTS")
+	logger.Info("START TESTS")
 	var i int
 	cc := make([][]*string, 0)
 	for i = 0; i < 100; i++ {
@@ -262,16 +260,15 @@ func TestRowsWithChunkDownloaderErrorFail(t *testing.T) {
 	}
 	rows := new(snowflakeRows)
 	rows.sc = nil
-	rows.RowType = rt
 	rows.ChunkDownloader = &snowflakeChunkDownloader{
 		sc:            nil,
 		ctx:           context.Background(),
-		CurrentChunk:  cc,
 		Total:         int64(len(cc) + numChunks*rowsInChunk),
 		ChunkMetas:    cm,
 		TotalRowIndex: int64(-1),
 		Qrmk:          "HOHOHO",
 		FuncDownload:  downloadChunkTestErrorFail,
+		RowSet:        rowSetType{RowType: rt, JSON: cc},
 	}
 	rows.ChunkDownloader.start()
 	cnt := 0
@@ -283,11 +280,10 @@ func TestRowsWithChunkDownloaderErrorFail(t *testing.T) {
 			break
 		}
 		if err != nil {
-			glog.V(2).Infof(
+			logger.Infof(
 				"failure was expected by the number of rows is wrong. expected: %v, got: %v", 715, cnt)
 			break
 		}
-		// fmt.Printf("data: %v\n", dest)
 		cnt++
 	}
 }
@@ -321,7 +317,7 @@ func TestDownloadChunkInvalidResponseBody(t *testing.T) {
 	}
 	scd.ChunksMutex = &sync.Mutex{}
 	scd.DoneDownloadCond = sync.NewCond(scd.ChunksMutex)
-	scd.Chunks = make(map[int][][]*string)
+	scd.Chunks = make(map[int][]chunkRowType)
 	scd.ChunksError = make(chan *chunkError, 1)
 	scd.FuncDownload(scd.ctx, scd, 1)
 	select {
@@ -363,7 +359,7 @@ func TestDownloadChunkErrorStatus(t *testing.T) {
 	}
 	scd.ChunksMutex = &sync.Mutex{}
 	scd.DoneDownloadCond = sync.NewCond(scd.ChunksMutex)
-	scd.Chunks = make(map[int][][]*string)
+	scd.Chunks = make(map[int][]chunkRowType)
 	scd.ChunksError = make(chan *chunkError, 1)
 	scd.FuncDownload(scd.ctx, scd, 1)
 	select {

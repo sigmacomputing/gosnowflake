@@ -1,3 +1,25 @@
+## Version 1.1.18
+- Ignore session gone error when closing session.
+- Set the latest Go version to 1.12
+
+## Version 1.1.17
+- TIMESTAMP_LTZ is not converted properly
+- Add SERVICE_NAME support to Golang
+
+## Version 1.1.16
+- Fix custom json parser (@mhseiden)
+- Modify Support link on Gosnowflake github
+
+## Version 1.1.15
+- Perform check on error for pingpong response (@ChTimTsubasa)
+- Add new 1.11.x for testing (@ChTimTsubasa)
+- Handle extra snowflake parameter 'type'(@ChTimTsubasa)
+
+## Version 1.1.14
+- Disable tests for golang 1.8 (@ChTimTsubasa)
+- Follow lint's new include path (@ChTimTsubasa)
+- Do not sleep through a context timeout(@mhseiden)
+
 ## Version 1.1.13
 - User configurable Retry timeout for downloading (@mhseiden)
 - Implement retry-uuid in the url (@ChTimTsubasa)
@@ -26,7 +48,7 @@
 
 ## Version 1.1.8
 
-- Removed username restrition for oAuth
+- Removed username restriction for oAuth
 
 ## Version 1.1.7
 

@@ -1,9 +1,12 @@
-// Copyright (c) 2017-2018 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2019 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,26 +17,98 @@ import (
 	"strings"
 	"time"
 
-	jcrypto "github.com/SermoDigital/jose/crypto"
-	"github.com/SermoDigital/jose/jws"
+	"github.com/form3tech-oss/jwt-go"
 	"github.com/google/uuid"
-
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/base64"
 )
 
 const (
 	clientType = "Go"
 )
 
+// AuthType indicates the type of authentication in Snowflake
+type AuthType int
+
 const (
-	authenticatorExternalBrowser = "EXTERNALBROWSER"
-	authenticatorOAuth           = "OAUTH"
-	authenticatorSnowflake       = "SNOWFLAKE"
-	authenticatorOkta            = "OKTA"
-	authenticatorJWT             = "SNOWFLAKE_JWT"
+	// AuthTypeSnowflake is the general username password authentication
+	AuthTypeSnowflake AuthType = iota
+	// AuthTypeOAuth is the OAuth authentication
+	AuthTypeOAuth
+	// AuthTypeExternalBrowser is to use a browser to access an Fed and perform SSO authentication
+	AuthTypeExternalBrowser
+	// AuthTypeOkta is to use a native okta URL to perform SSO authentication on Okta
+	AuthTypeOkta
+	// AuthTypeJwt is to use Jwt to perform authentication
+	AuthTypeJwt
+	// AuthTypeTokenAccessor is to use the provided token accessor and bypass authentication
+	AuthTypeTokenAccessor
 )
+
+func determineAuthenticatorType(cfg *Config, value string) error {
+	upperCaseValue := strings.ToUpper(value)
+	lowerCaseValue := strings.ToLower(value)
+	if strings.Trim(value, " ") == "" || upperCaseValue == AuthTypeSnowflake.String() {
+		cfg.Authenticator = AuthTypeSnowflake
+		return nil
+	} else if upperCaseValue == AuthTypeOAuth.String() {
+		cfg.Authenticator = AuthTypeOAuth
+		return nil
+	} else if upperCaseValue == AuthTypeJwt.String() {
+		cfg.Authenticator = AuthTypeJwt
+		return nil
+	} else if upperCaseValue == AuthTypeExternalBrowser.String() {
+		cfg.Authenticator = AuthTypeExternalBrowser
+		return nil
+	} else {
+		// possibly Okta case
+		oktaURLString, err := url.QueryUnescape(lowerCaseValue)
+		if err != nil {
+			return &SnowflakeError{
+				Number:      ErrCodeFailedToParseAuthenticator,
+				Message:     errMsgFailedToParseAuthenticator,
+				MessageArgs: []interface{}{lowerCaseValue},
+			}
+		}
+
+		oktaURL, err := url.Parse(oktaURLString)
+		if err != nil {
+			return &SnowflakeError{
+				Number:      ErrCodeFailedToParseAuthenticator,
+				Message:     errMsgFailedToParseAuthenticator,
+				MessageArgs: []interface{}{oktaURLString},
+			}
+		}
+
+		if oktaURL.Scheme != "https" || !strings.HasSuffix(oktaURL.Host, "okta.com") {
+			return &SnowflakeError{
+				Number:      ErrCodeFailedToParseAuthenticator,
+				Message:     errMsgFailedToParseAuthenticator,
+				MessageArgs: []interface{}{oktaURLString},
+			}
+		}
+		cfg.OktaURL = oktaURL
+		cfg.Authenticator = AuthTypeOkta
+	}
+	return nil
+}
+
+func (authType AuthType) String() string {
+	switch authType {
+	case AuthTypeSnowflake:
+		return "SNOWFLAKE"
+	case AuthTypeOAuth:
+		return "OAUTH"
+	case AuthTypeExternalBrowser:
+		return "EXTERNALBROWSER"
+	case AuthTypeOkta:
+		return "OKTA"
+	case AuthTypeJwt:
+		return "SNOWFLAKE_JWT"
+	case AuthTypeTokenAccessor:
+		return "TOKENACCESSOR"
+	default:
+		return "UNKNOWN"
+	}
+}
 
 // platform consists of compiler and architecture type in string
 var platform = fmt.Sprintf("%v-%v", runtime.Compiler, runtime.GOARCH)
@@ -42,12 +117,19 @@ var platform = fmt.Sprintf("%v-%v", runtime.Compiler, runtime.GOARCH)
 var operatingSystem = runtime.GOOS
 
 // userAgent shows up in User-Agent HTTP header
-var userAgent = fmt.Sprintf("%v/%v/%v/%v", clientType, SnowflakeGoDriverVersion, runtime.Version(), platform)
+var userAgent = fmt.Sprintf("%v/%v (%v-%v) %v/%v",
+	clientType,
+	SnowflakeGoDriverVersion,
+	operatingSystem,
+	runtime.GOARCH,
+	runtime.Compiler,
+	runtime.Version())
 
 type authRequestClientEnvironment struct {
 	Application string `json:"APPLICATION"`
 	Os          string `json:"OS"`
 	OsVersion   string `json:"OS_VERSION"`
+	OCSPMode    string `json:"OCSP_MODE"`
 }
 type authRequestData struct {
 	ClientAppID             string                       `json:"CLIENT_APP_ID"`
@@ -60,7 +142,7 @@ type authRequestData struct {
 	ExtAuthnDuoMethod       string                       `json:"EXT_AUTHN_DUO_METHOD,omitempty"`
 	Passcode                string                       `json:"PASSCODE,omitempty"`
 	Authenticator           string                       `json:"AUTHENTICATOR,omitempty"`
-	SessionParameters       map[string]string            `json:"SESSION_PARAMETERS,omitempty"`
+	SessionParameters       map[string]interface{}       `json:"SESSION_PARAMETERS,omitempty"`
 	ClientEnvironment       authRequestClientEnvironment `json:"CLIENT_ENVIRONMENT"`
 	BrowserModeRedirectPort string                       `json:"BROWSER_MODE_REDIRECT_PORT,omitempty"`
 	ProofKey                string                       `json:"PROOF_KEY,omitempty"`
@@ -83,23 +165,23 @@ type authResponseSessionInfo struct {
 }
 
 type authResponseMain struct {
-	Token                   string                  `json:"token,omitempty"`
-	ValidityInSeconds       time.Duration           `json:"validityInSeconds,omitempty"`
-	MasterToken             string                  `json:"masterToken,omitempty"`
-	MasterValidityInSeconds time.Duration           `json:"masterValidityInSeconds"`
-	DisplayUserName         string                  `json:"displayUserName"`
-	ServerVersion           string                  `json:"serverVersion"`
-	FirstLogin              bool                    `json:"firstLogin"`
-	RemMeToken              string                  `json:"remMeToken"`
-	RemMeValidityInSeconds  time.Duration           `json:"remMeValidityInSeconds"`
-	HealthCheckInterval     time.Duration           `json:"healthCheckInterval"`
-	NewClientForUpgrade     string                  `json:"newClientForUpgrade"`
-	SessionID               int                     `json:"sessionId"`
-	Parameters              []nameValueParameter    `json:"parameters"`
-	SessionInfo             authResponseSessionInfo `json:"sessionInfo"`
-	TokenURL                string                  `json:"tokenUrl,omitempty"`
-	SSOURL                  string                  `json:"ssoUrl,omitempty"`
-	ProofKey                string                  `json:"proofKey,omitempty"`
+	Token               string                  `json:"token,omitempty"`
+	Validity            time.Duration           `json:"validityInSeconds,omitempty"`
+	MasterToken         string                  `json:"masterToken,omitempty"`
+	MasterValidity      time.Duration           `json:"masterValidityInSeconds"`
+	DisplayUserName     string                  `json:"displayUserName"`
+	ServerVersion       string                  `json:"serverVersion"`
+	FirstLogin          bool                    `json:"firstLogin"`
+	RemMeToken          string                  `json:"remMeToken"`
+	RemMeValidity       time.Duration           `json:"remMeValidityInSeconds"`
+	HealthCheckInterval time.Duration           `json:"healthCheckInterval"`
+	NewClientForUpgrade string                  `json:"newClientForUpgrade"`
+	SessionID           int64                   `json:"sessionId"`
+	Parameters          []nameValueParameter    `json:"parameters"`
+	SessionInfo         authResponseSessionInfo `json:"sessionInfo"`
+	TokenURL            string                  `json:"tokenUrl,omitempty"`
+	SSOURL              string                  `json:"ssoUrl,omitempty"`
+	ProofKey            string                  `json:"proofKey,omitempty"`
 }
 type authResponse struct {
 	Data    authResponseMain `json:"data"`
@@ -116,12 +198,11 @@ func postAuth(
 	body []byte,
 	timeout time.Duration) (
 	data *authResponse, err error) {
-	params.Add("requestId", uuid.New().String())
+	params.Add(requestIDKey, getOrGenerateRequestIDFromContext(ctx).String())
 	params.Add(requestGUIDKey, uuid.New().String())
-	fullURL := fmt.Sprintf(
-		"%s://%s:%d%s", sr.Protocol, sr.Host, sr.Port,
-		"/session/v1/login-request?"+params.Encode())
-	glog.V(2).Infof("full URL: %v", fullURL)
+
+	fullURL := sr.getFullURL(loginRequestPath, params)
+	logger.Infof("full URL: %v", fullURL)
 	resp, err := sr.FuncPost(ctx, sr, fullURL, headers, body, timeout, true)
 	if err != nil {
 		return nil, err
@@ -131,8 +212,7 @@ func postAuth(
 		var respd authResponse
 		err = json.NewDecoder(resp.Body).Decode(&respd)
 		if err != nil {
-			glog.V(1).Infof("failed to decode JSON. err: %v", err)
-			glog.Flush()
+			logger.Error("failed to decode JSON. err: %v", err)
 			return nil, err
 		}
 		return &respd, nil
@@ -157,13 +237,11 @@ func postAuth(
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.V(1).Infof("failed to extract HTTP response body. err: %v", err)
-		glog.Flush()
+		logger.Errorf("failed to extract HTTP response body. err: %v", err)
 		return nil, err
 	}
-	glog.V(1).Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, fullURL, b)
-	glog.V(1).Infof("Header: %v", resp.Header)
-	glog.Flush()
+	logger.Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, fullURL, b)
+	logger.Infof("Header: %v", resp.Header)
 	return nil, &SnowflakeError{
 		Number:      ErrFailedToAuth,
 		SQLState:    SQLStateConnectionRejected,
@@ -176,9 +254,9 @@ func postAuth(
 // with Snowflake.
 func getHeaders() map[string]string {
 	headers := make(map[string]string)
-	headers["Content-Type"] = headerContentTypeApplicationJSON
-	headers["accept"] = headerAcceptTypeApplicationSnowflake
-	headers["User-Agent"] = userAgent
+	headers[httpHeaderContentType] = headerContentTypeApplicationJSON
+	headers[httpHeaderAccept] = headerAcceptTypeApplicationSnowflake
+	headers[httpHeaderUserAgent] = userAgent
 	return headers
 }
 
@@ -189,19 +267,21 @@ func authenticate(
 	samlResponse []byte,
 	proofKey []byte,
 ) (resp *authResponseMain, err error) {
-
 	headers := getHeaders()
 	clientEnvironment := authRequestClientEnvironment{
 		Application: sc.cfg.Application,
 		Os:          operatingSystem,
 		OsVersion:   platform,
+		OCSPMode:    sc.cfg.ocspMode(),
 	}
 
-	sessionParameters := make(map[string]string)
+	sessionParameters := make(map[string]interface{})
 	for k, v := range sc.cfg.Params {
 		// upper casing to normalize keys
 		sessionParameters[strings.ToUpper(k)] = *v
 	}
+
+	sessionParameters[sessionClientValidateDefaultParameters] = sc.cfg.ValidateDefaultParameters != ConfigBoolFalse
 
 	requestMain := authRequestData{
 		ClientAppID:       clientType,
@@ -211,32 +291,28 @@ func authenticate(
 		ClientEnvironment: clientEnvironment,
 	}
 
-	authenticator := strings.ToUpper(sc.cfg.Authenticator)
-	switch authenticator {
-	case authenticatorExternalBrowser:
+	switch sc.cfg.Authenticator {
+	case AuthTypeExternalBrowser:
 		requestMain.ProofKey = string(proofKey)
 		requestMain.Token = string(samlResponse)
 		requestMain.LoginName = sc.cfg.User
-		requestMain.Authenticator = authenticatorExternalBrowser
-	case authenticatorOAuth:
+		requestMain.Authenticator = AuthTypeExternalBrowser.String()
+	case AuthTypeOAuth:
 		requestMain.LoginName = sc.cfg.User
-		requestMain.Authenticator = authenticatorOAuth
+		requestMain.Authenticator = AuthTypeOAuth.String()
 		requestMain.Token = sc.cfg.Token
-	case authenticatorOkta:
+	case AuthTypeOkta:
 		requestMain.RawSAMLResponse = string(samlResponse)
-	case authenticatorJWT:
-		requestMain.Authenticator = authenticatorJWT
+	case AuthTypeJwt:
+		requestMain.Authenticator = AuthTypeJwt.String()
 
-		jwtTokenInBytes, err := prepareJWTToken(sc.cfg)
+		jwtTokenString, err := prepareJWTToken(sc.cfg)
 		if err != nil {
 			return nil, err
 		}
-		requestMain.Token = string(jwtTokenInBytes)
-
-	case authenticatorSnowflake:
-		fallthrough
-	default:
-		glog.V(2).Info("Username and password")
+		requestMain.Token = jwtTokenString
+	case AuthTypeSnowflake:
+		logger.Info("Username and password")
 		requestMain.LoginName = sc.cfg.User
 		requestMain.Password = sc.cfg.Password
 		switch {
@@ -246,6 +322,21 @@ func authenticate(
 			requestMain.Passcode = sc.cfg.Passcode
 			requestMain.ExtAuthnDuoMethod = "passcode"
 		}
+	case AuthTypeTokenAccessor:
+		logger.Info("Bypass authentication using existing token from token accessor")
+		sessionInfo := authResponseSessionInfo{
+			DatabaseName:  sc.cfg.Database,
+			SchemaName:    sc.cfg.Schema,
+			WarehouseName: sc.cfg.Warehouse,
+			RoleName:      sc.cfg.Role,
+		}
+		token, masterToken, sessionID := sc.cfg.TokenAccessor.GetTokens()
+		return &authResponseMain{
+			Token:       token,
+			MasterToken: masterToken,
+			SessionID:   sessionID,
+			SessionInfo: sessionInfo,
+		}, nil
 	}
 
 	authRequest := authRequest{
@@ -270,19 +361,16 @@ func authenticate(
 		return
 	}
 
-	glog.V(2).Infof("PARAMS for Auth: %v, %v, %v, %v, %v, %v",
-		params, sc.rest.Protocol, sc.rest.Host, sc.rest.Port, sc.rest.LoginTimeout, sc.rest.Authenticator)
+	logger.WithContext(sc.ctx).Infof("PARAMS for Auth: %v, %v, %v, %v, %v, %v",
+		params, sc.rest.Protocol, sc.rest.Host, sc.rest.Port, sc.rest.LoginTimeout, sc.cfg.Authenticator.String())
 
 	respd, err := sc.rest.FuncPostAuth(ctx, sc.rest, params, headers, jsonBody, sc.rest.LoginTimeout)
 	if err != nil {
 		return nil, err
 	}
 	if !respd.Success {
-		glog.V(1).Infoln("Authentication FAILED")
-		glog.Flush()
-		sc.rest.Token = ""
-		sc.rest.MasterToken = ""
-		sc.rest.SessionID = -1
+		logger.Errorln("Authentication FAILED")
+		sc.rest.TokenAccessor.SetTokens("", "", -1)
 		code, err := strconv.Atoi(respd.Code)
 		if err != nil {
 			code = -1
@@ -294,38 +382,85 @@ func authenticate(
 			Message:  respd.Message,
 		}
 	}
-	glog.V(2).Info("Authentication SUCCESS")
-	sc.rest.Token = respd.Data.Token
-	sc.rest.MasterToken = respd.Data.MasterToken
-	sc.rest.SessionID = respd.Data.SessionID
+	logger.Info("Authentication SUCCESS")
+	sc.rest.TokenAccessor.SetTokens(respd.Data.Token, respd.Data.MasterToken, respd.Data.SessionID)
 	return &respd.Data, nil
 }
 
-// Generate a JWT token in byte slice given the configuration
-func prepareJWTToken(config *Config) (tokenInBytes []byte, err error) {
-	claims := jws.Claims{}
-
+// Generate a JWT token in string given the configuration
+func prepareJWTToken(config *Config) (string, error) {
 	pubBytes, err := x509.MarshalPKIXPublicKey(config.PrivateKey.Public())
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	hash := sha256.Sum256(pubBytes)
 
 	accountName := strings.ToUpper(config.Account)
 	userName := strings.ToUpper(config.User)
 
-	claims.SetIssuer(fmt.Sprintf("%s.%s.%s", accountName, userName,
-		"SHA256:"+base64.StdEncoding.EncodeToString(hash[:])))
-	claims.SetSubject(fmt.Sprintf("%s.%s", accountName, userName))
-	claims.SetIssuedAt(time.Now().UTC())
-	claims.SetExpiration(time.Now().UTC().Add(config.JWTExpireTimeout))
+	issueAtTime := time.Now().UTC()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iss": fmt.Sprintf("%s.%s.%s", accountName, userName, "SHA256:"+base64.StdEncoding.EncodeToString(hash[:])),
+		"sub": fmt.Sprintf("%s.%s", accountName, userName),
+		"iat": issueAtTime.Unix(),
+		"nbf": time.Date(2015, 10, 10, 12, 0, 0, 0, time.UTC).Unix(),
+		"exp": issueAtTime.Add(config.JWTExpireTimeout).Unix(),
+	})
 
-	jwt := jws.NewJWT(claims, jcrypto.SigningMethodRS256)
-
-	tokenInBytes, err = jwt.Serialize(config.PrivateKey)
+	tokenString, err := token.SignedString(config.PrivateKey)
 
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return tokenInBytes, err
+
+	return tokenString, err
+}
+
+// Authenticate with sc.cfg
+func authenticateWithConfig(sc *snowflakeConn) error {
+	var authData *authResponseMain
+	var samlResponse []byte
+	var proofKey []byte
+	var err error
+	logger.Infof("Authenticating via %v", sc.cfg.Authenticator.String())
+	switch sc.cfg.Authenticator {
+	case AuthTypeExternalBrowser:
+		samlResponse, proofKey, err = authenticateByExternalBrowser(
+			sc.ctx,
+			sc.rest,
+			sc.cfg.Authenticator.String(),
+			sc.cfg.Application,
+			sc.cfg.Account,
+			sc.cfg.User,
+			sc.cfg.Password)
+		if err != nil {
+			sc.cleanup()
+			return err
+		}
+	case AuthTypeOkta:
+		samlResponse, err = authenticateBySAML(
+			sc.ctx,
+			sc.rest,
+			sc.cfg.OktaURL,
+			sc.cfg.Application,
+			sc.cfg.Account,
+			sc.cfg.User,
+			sc.cfg.Password)
+		if err != nil {
+			sc.cleanup()
+			return err
+		}
+	}
+	authData, err = authenticate(
+		sc.ctx,
+		sc,
+		samlResponse,
+		proofKey)
+	if err != nil {
+		sc.cleanup()
+		return err
+	}
+	sc.populateSessionParameters(authData.Parameters)
+	sc.ctx = context.WithValue(sc.ctx, SFSessionIDKey, authData.SessionID)
+	return nil
 }
