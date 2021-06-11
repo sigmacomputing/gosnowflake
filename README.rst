@@ -99,7 +99,7 @@ You may use your preferred editor to edit the driver code. Make certain to run `
 Updating to Latest Upstream
 ----------------------------------------------------------------------
 
-In general, we want to keep our fork up-to-date with changes from the `upstream gosnowflake repo <https://github.com/snowflakedb/gosnowflake>`. Follow these steps to pull upstream changes into our fork.
+In general, we want to keep our fork up-to-date with changes from the `upstream gosnowflake repo <https://github.com/snowflakedb/gosnowflake>`_. Follow these steps to pull upstream changes into our fork.
 
 First, add the upstream repo as a remote:
 
@@ -120,7 +120,7 @@ To see the number of commits in ``origin/master`` but not in ``upstream/master``
 
     git log --oneline upstream/master..origin/master | wc -l
 
-Next, we want to create a merge commit that incorporates changes from the upstream repo with changes in our fork. These steps are based on `a blog post about maintaining long-lived forks <https://die-antwort.eu/techblog/2016-08-git-tricks-for-maintaining-a-long-lived-fork/>`.
+Next, we want to create a merge commit that incorporates changes from the upstream repo with changes in our fork. These steps are based on `a blog post about maintaining long-lived forks <https://die-antwort.eu/techblog/2016-08-git-tricks-for-maintaining-a-long-lived-fork/>_`.
 
 .. code-block:: bash
 
@@ -158,7 +158,7 @@ To run the benchmark, populate the file ``multiplex/scripts/parameters.json`` wi
 
     ./multiplex/scripts/query_bench.sh <old commit hash> <new commit hash> > ~/tmp/gosnowflake-bench-2021-06-11.csv
 
-Once that's done running, add a new page to the `Snowflake Go Driver Updates workbook <https://staging.sigmacomputing.io/sigma-on-sigma/workbook/Snowflake-Go-Driver-Updates-Hm0VmWLJZbgi9m4hWayjK>` with the results from your benchmark run.
+Once that's done running, add a new page to the `Snowflake Go Driver Updates workbook <https://staging.sigmacomputing.io/sigma-on-sigma/workbook/Snowflake-Go-Driver-Updates-Hm0VmWLJZbgi9m4hWayjK>_` with the results from your benchmark run.
 
 Support
 ----------------------------------------------------------------------
