@@ -158,7 +158,9 @@ To run the benchmark, populate the file ``multiplex/scripts/parameters.json`` wi
 
     ./multiplex/scripts/query_bench.sh <old commit hash> <new commit hash> > ~/tmp/gosnowflake-bench-2021-06-11.csv
 
-Once that's done running, add a new page to the `Snowflake Go Driver Updates workbook <https://staging.sigmacomputing.io/sigma-on-sigma/workbook/Snowflake-Go-Driver-Updates-Hm0VmWLJZbgi9m4hWayjK>`_ with the results from your benchmark run.
+Once that's done running, add a new page to the `Snowflake Go Driver Updates workbook <https://staging.sigmacomputing.io/sigma-on-sigma/workbook/Snowflake-Go-Driver-Updates-Hm0VmWLJZbgi9m4hWayjK>`_ with the results from your benchmark run. If there were any errors while running any of the queries or there was a substantial regression in query runtime, investigate before merging. If everything looks good (all queries ran, median and p90 runtime are within a few percent), merge the commit into gosnowflake.
+
+After the update is merged to gosnowflake, go back to the ``mono-go`` repo and run ``go get github.com/sigmacomputing/gosnowflake@master`` to update the version of gosnowflake that Multiplex uses. Create a PR for the upgrade, get feedback, and merge it into master.
 
 Support
 ----------------------------------------------------------------------
