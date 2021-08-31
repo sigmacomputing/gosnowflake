@@ -29,6 +29,7 @@ const (
 	queryInProgressCode      = "333333"
 	queryInProgressAsyncCode = "333334"
 	sessionExpiredCode       = "390112"
+	queryNotExecuting        = "000605"
 )
 
 // Snowflake Server Endpoints
@@ -129,6 +130,14 @@ type cancelQueryResponse struct {
 	Message string      `json:"message"`
 	Code    string      `json:"code"`
 	Success bool        `json:"success"`
+}
+
+type telemetryResponse struct {
+	Data    interface{}       `json:"data,omitempty"`
+	Message string            `json:"message"`
+	Code    string            `json:"code"`
+	Success bool              `json:"success"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 func postRestful(
@@ -420,6 +429,15 @@ func renewRestfulSession(ctx context.Context, sr *snowflakeRestful, timeout time
 	}
 }
 
+func getCancelRetry(ctx context.Context) int {
+	val := ctx.Value(cancelRetry)
+	if val == nil {
+		return 5
+	}
+	cnt, _ := val.(int)
+	return cnt
+}
+
 func cancelQuery(ctx context.Context, sr *snowflakeRestful, requestID uuid.UUID, timeout time.Duration) error {
 	logger.WithContext(ctx).Info("cancel query")
 	params := &url.Values{}
@@ -452,12 +470,15 @@ func cancelQuery(ctx context.Context, sr *snowflakeRestful, requestID uuid.UUID,
 			logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
 			return err
 		}
+		ctxRetry := getCancelRetry(ctx)
 		if !respd.Success && respd.Code == sessionExpiredCode {
 			err := sr.FuncRenewSession(ctx, sr, timeout)
 			if err != nil {
 				return err
 			}
 			return sr.FuncCancelQuery(ctx, sr, requestID, timeout)
+		} else if !respd.Success && respd.Code == queryNotExecuting && ctxRetry != 0 {
+			return sr.FuncCancelQuery(context.WithValue(ctx, cancelRetry, ctxRetry-1), sr, requestID, timeout)
 		} else if respd.Success {
 			return nil
 		} else {
@@ -484,4 +505,13 @@ func cancelQuery(ctx context.Context, sr *snowflakeRestful, requestID uuid.UUID,
 		Message:     errMsgFailedToCancelQuery,
 		MessageArgs: []interface{}{resp.StatusCode, fullURL},
 	}
+}
+
+func getQueryIDChan(ctx context.Context) chan<- string {
+	v := ctx.Value(queryIDChannel)
+	if v == nil {
+		return nil
+	}
+	c, _ := v.(chan<- string)
+	return c
 }

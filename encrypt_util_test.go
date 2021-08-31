@@ -33,6 +33,7 @@ func TestEncryptDecryptFile(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	defer fd.Close()
 	defer os.Remove(inputFile)
 	if _, err = fd.Write([]byte(data)); err != nil {
 		t.Error(err)
@@ -50,6 +51,7 @@ func TestEncryptDecryptFile(t *testing.T) {
 	defer os.Remove(decryptedFile)
 
 	fd, _ = os.OpenFile(decryptedFile, os.O_RDONLY, os.ModePerm)
+	defer fd.Close()
 	content, _ := ioutil.ReadAll(fd)
 	if string(content) != data {
 		t.Fatalf("data did not match content. expected: %v, got: %v", data, string(content))
@@ -67,18 +69,18 @@ func TestEncryptDecryptLargeFile(t *testing.T) {
 	tmpDir, _ := ioutil.TempDir("", "data")
 	tmpDir = generateKLinesOfNFiles(numberOfLines, numberOfFiles, false, tmpDir)
 	defer os.RemoveAll(tmpDir)
-	files, err := filepath.Glob(tmpDir + "/file*")
+	files, err := filepath.Glob(filepath.Join(tmpDir, "file*"))
 	if err != nil {
 		t.Error(err)
 	}
 	inputFile := files[0]
 
-	metadata, encryptedFile, err := encryptFile(&encMat, inputFile, 0, "")
+	metadata, encryptedFile, err := encryptFile(&encMat, inputFile, 0, tmpDir)
 	if err != nil {
 		t.Error(err)
 	}
 	defer os.Remove(encryptedFile)
-	decryptedFile, err := decryptFile(metadata, &encMat, encryptedFile, 0, "")
+	decryptedFile, err := decryptFile(metadata, &encMat, encryptedFile, 0, tmpDir)
 	if err != nil {
 		t.Error(err)
 	}
@@ -93,8 +95,8 @@ func TestEncryptDecryptLargeFile(t *testing.T) {
 	if err = scanner.Err(); err != nil {
 		t.Error(err)
 	}
-	if cnt != 10000 {
-		t.Fatalf("incorrect number of lines. expected: %v, got: %v", 10000, cnt)
+	if cnt != numberOfLines && cnt != numberOfLines+1 {
+		t.Fatalf("incorrect number of lines. expected: %v, got: %v", numberOfLines, cnt)
 	}
 }
 
@@ -126,6 +128,7 @@ func generateKLinesOfNFiles(k int, n int, compress bool, tmpDir string) string {
 			rec := fmt.Sprintf("%v,%v,%v,%v,%v,%v,%v,%v\n", num, dt, ts, tsltz, tsntz, tstz, pct, ratio)
 			f.Write([]byte(rec))
 		}
+		f.Close()
 		if compress {
 			if !isWindows {
 				gzipCmd := exec.Command("gzip", filepath.Join(tmpDir, "file"+strconv.FormatInt(int64(i), 10)))
@@ -138,12 +141,11 @@ func generateKLinesOfNFiles(k int, n int, compress bool, tmpDir string) string {
 			} else {
 				fOut, _ := os.OpenFile(fname+".gz", os.O_CREATE|os.O_WRONLY, os.ModePerm)
 				w := gzip.NewWriter(fOut)
-				defer w.Close()
 				fIn, _ := os.OpenFile(fname, os.O_RDONLY, os.ModePerm)
-				_, err := io.Copy(w, fIn)
-				if err != nil {
+				if _, err := io.Copy(w, fIn); err != nil {
 					return ""
 				}
+				w.Close()
 			}
 		}
 	}
