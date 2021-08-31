@@ -1,24 +1,23 @@
-// Copyright (c) 2017-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2017-2021 Snowflake Computing Inc. All rights reserved.
 
 package gosnowflake
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"io"
+	"github.com/google/uuid"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -33,13 +32,8 @@ const (
 )
 
 const (
-	statementTypeIDMulti = int64(0x1000)
-
+	statementTypeIDMulti            = int64(0x1000)
 	statementTypeIDDml              = int64(0x3000)
-	statementTypeIDInsert           = statementTypeIDDml + int64(0x100)
-	statementTypeIDUpdate           = statementTypeIDDml + int64(0x200)
-	statementTypeIDDelete           = statementTypeIDDml + int64(0x300)
-	statementTypeIDMerge            = statementTypeIDDml + int64(0x400)
 	statementTypeIDMultiTableInsert = statementTypeIDDml + int64(0x500)
 )
 
@@ -73,26 +67,14 @@ type snowflakeConn struct {
 	SequenceCounter uint64
 	QueryID         string
 	SQLState        string
+	telemetry       *snowflakeTelemetry
 	internal        InternalClient
 }
 
-var queryIDPattern = `[\w\-_]+`
-var queryIDRegexp = regexp.MustCompile(queryIDPattern)
-
-const (
-	urlQueriesResultFmt string = "/queries/%s/result"
+var (
+	queryIDPattern = `[\w\-_]+`
+	queryIDRegexp  = regexp.MustCompile(queryIDPattern)
 )
-
-// isDml returns true if the statement type code is in the range of DML.
-func (sc *snowflakeConn) isDml(v int64) bool {
-	return statementTypeIDDml <= v && v <= statementTypeIDMultiTableInsert
-}
-
-// isMultiStmt returns true if the statement type code is of type multistatement
-// Note that the statement type code is also equivalent to type INSERT, so an additional check of the name is required
-func (sc *snowflakeConn) isMultiStmt(data *execResponseData) bool {
-	return data.StatementTypeID == statementTypeIDMulti && data.RowType[0].Name == "multiple statement execution"
-}
 
 func (sc *snowflakeConn) exec(
 	ctx context.Context,
@@ -125,7 +107,8 @@ func (sc *snowflakeConn) exec(
 	if len(bindings) > 0 {
 		arrayBindThreshold := sc.getArrayBindStageThreshold()
 		numBinds := arrayBindValueCount(bindings)
-		if 0 < arrayBindThreshold && arrayBindThreshold <= numBinds && !describeOnly && isArrayBind(bindings) {
+		if 0 < arrayBindThreshold && arrayBindThreshold <= numBinds &&
+			!describeOnly && isArrayBind(bindings) {
 			// bulk array insert binding
 			uploader := bindUploader{
 				sc:        sc,
@@ -160,7 +143,8 @@ func (sc *snowflakeConn) exec(
 	}
 
 	var data *execResponse
-	data, err = sc.rest.FuncPostQuery(ctx, sc.rest, &url.Values{}, headers, jsonBody, sc.rest.RequestTimeout, requestID, sc.cfg)
+	data, err = sc.rest.FuncPostQuery(ctx, sc.rest, &url.Values{}, headers,
+		jsonBody, sc.rest.RequestTimeout, requestID, sc.cfg)
 	if err != nil {
 		return data, err
 	}
@@ -176,36 +160,15 @@ func (sc *snowflakeConn) exec(
 	}
 	logger.WithContext(ctx).Infof("Success: %v, Code: %v", data.Success, code)
 	if !data.Success {
-		return nil, &SnowflakeError{
+		return nil, (&SnowflakeError{
 			Number:   code,
 			SQLState: data.Data.SQLState,
 			Message:  data.Message,
 			QueryID:  data.Data.QueryID,
-		}
+		}).exceptionTelemetry(sc)
 	}
 	if isFileTransfer(query) {
-		sfa := snowflakeFileTransferAgent{
-			sc:      sc,
-			data:    &data.Data,
-			command: query,
-			options: new(SnowflakeFileTransferOptions),
-		}
-		if fs := getFileStream(ctx); fs != nil {
-			sfa.sourceStream = fs
-			if isInternal {
-				sfa.data.AutoCompress = false
-			}
-		}
-		if op := getFileTransferOptions(ctx); op != nil {
-			sfa.options = op
-		}
-		if sfa.options.multiPartThreshold == 0 {
-			sfa.options.multiPartThreshold = dataSizeThreshold
-		}
-		if err = sfa.execute(); err != nil {
-			return nil, err
-		}
-		data, err = sfa.result()
+		data, err = sc.processFileTransfer(ctx, data, query, isInternal)
 		if err != nil {
 			return nil, err
 		}
@@ -249,31 +212,34 @@ func (sc *snowflakeConn) Begin() (driver.Tx, error) {
 	return sc.BeginTx(sc.ctx, driver.TxOptions{})
 }
 
-func (sc *snowflakeConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+func (sc *snowflakeConn) BeginTx(
+	ctx context.Context,
+	opts driver.TxOptions) (
+	driver.Tx, error) {
 	logger.WithContext(ctx).Info("BeginTx")
 	if opts.ReadOnly {
-		return nil, &SnowflakeError{
+		return nil, (&SnowflakeError{
 			Number:   ErrNoReadOnlyTransaction,
 			SQLState: SQLStateFeatureNotSupported,
 			Message:  errMsgNoReadOnlyTransaction,
-		}
+		}).exceptionTelemetry(sc)
 	}
 	if int(opts.Isolation) != int(sql.LevelDefault) {
-		return nil, &SnowflakeError{
+		return nil, (&SnowflakeError{
 			Number:   ErrNoDefaultTransactionIsolationLevel,
 			SQLState: SQLStateFeatureNotSupported,
 			Message:  errMsgNoDefaultTransactionIsolationLevel,
-		}
+		}).exceptionTelemetry(sc)
 	}
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
 	}
 	isDesc := isDescribeOnly(ctx)
-	_, err := sc.exec(ctx, "BEGIN", false /* noResult */, false /* isInternal */, isDesc, nil)
-	if err != nil {
+	if _, err := sc.exec(ctx, "BEGIN", false, /* noResult */
+		false /* isInternal */, isDesc, nil); err != nil {
 		return nil, err
 	}
-	return &snowflakeTx{sc}, err
+	return &snowflakeTx{sc}, nil
 }
 
 func (sc *snowflakeConn) cleanup() {
@@ -284,11 +250,11 @@ func (sc *snowflakeConn) cleanup() {
 
 func (sc *snowflakeConn) Close() (err error) {
 	logger.WithContext(sc.ctx).Infoln("Close")
+	sc.telemetry.sendBatch()
 	sc.stopHeartBeat()
 
 	if !sc.cfg.KeepSessionAlive {
-		err = sc.rest.FuncCloseSession(sc.ctx, sc.rest, sc.rest.RequestTimeout)
-		if err != nil {
+		if err = sc.rest.FuncCloseSession(sc.ctx, sc.rest, sc.rest.RequestTimeout); err != nil {
 			logger.Error(err)
 		}
 	}
@@ -296,25 +262,29 @@ func (sc *snowflakeConn) Close() (err error) {
 	return nil
 }
 
-func (sc *snowflakeConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+func (sc *snowflakeConn) PrepareContext(
+	ctx context.Context,
+	query string) (
+	driver.Stmt, error) {
 	logger.WithContext(sc.ctx).Infoln("Prepare")
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
 	}
 	noResult := isAsyncMode(ctx)
-	data, err := sc.exec(ctx, query, noResult, false /* isInternal */, true /* describeOnly */, []driver.NamedValue{})
+	data, err := sc.exec(ctx, query, noResult, false, /* isInternal */
+		true /* describeOnly */, []driver.NamedValue{})
 	if err != nil {
 		if data != nil {
 			code, err := strconv.Atoi(data.Code)
 			if err != nil {
 				return nil, err
 			}
-			return nil, &SnowflakeError{
+			return nil, (&SnowflakeError{
 				Number:   code,
 				SQLState: data.Data.SQLState,
 				Message:  err.Error(),
 				QueryID:  data.Data.QueryID,
-			}
+			}).exceptionTelemetry(sc)
 		}
 		return nil, err
 	}
@@ -325,7 +295,11 @@ func (sc *snowflakeConn) PrepareContext(ctx context.Context, query string) (driv
 	return stmt, nil
 }
 
-func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+func (sc *snowflakeConn) ExecContext(
+	ctx context.Context,
+	query string,
+	args []driver.NamedValue) (
+	driver.Result, error) {
 	logger.WithContext(ctx).Infof("Exec: %#v, %v", query, args)
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
@@ -343,11 +317,12 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 			if err != nil {
 				return nil, err
 			}
-			return nil, &SnowflakeError{
+			return nil, (&SnowflakeError{
 				Number:   code,
 				SQLState: data.Data.SQLState,
 				Message:  err.Error(),
-				QueryID:  data.Data.QueryID}
+				QueryID:  data.Data.QueryID,
+			}).exceptionTelemetry(sc)
 		}
 		return nil, err
 	}
@@ -357,7 +332,7 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 		return data.Data.AsyncResult, nil
 	}
 
-	if sc.isDml(data.Data.StatementTypeID) {
+	if isDml(data.Data.StatementTypeID) {
 		// collects all values from the returned row sets
 		updatedRows, err := updateRows(data.Data)
 		if err != nil {
@@ -373,21 +348,18 @@ func (sc *snowflakeConn) ExecContext(ctx context.Context, query string, args []d
 			rows.monitoring = m
 		}
 		return rows, nil
-	} else if sc.isMultiStmt(&data.Data) {
-		rows, err := sc.handleMultiExec(ctx, data.Data)
-		if err != nil {
-			return nil, err
-		}
-		if m, err := sc.monitoring(sc.QueryID, time.Since(qStart)); err == nil {
-			rows.monitoring = m
-		}
-		return rows, nil
+	} else if isMultiStmt(&data.Data) {
+		return sc.handleMultiExec(ctx, data.Data)
 	}
 	logger.Debug("DDL")
 	return driver.ResultNoRows, nil
 }
 
-func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (sc *snowflakeConn) QueryContext(
+	ctx context.Context,
+	query string,
+	args []driver.NamedValue) (
+	driver.Rows, error) {
 	qid, err := getResumeQueryID(ctx)
 	if err != nil {
 		return nil, err
@@ -396,17 +368,20 @@ func (sc *snowflakeConn) QueryContext(ctx context.Context, query string, args []
 		return sc.queryContextInternal(ctx, query, args)
 	}
 
-	// first we will check the status of this particular query to find out if there is result to fetch
-	err = sc.checkQueryStatus(ctx, qid)
+	// check the query status to find out if there is a result to fetch
+	_, err = sc.checkQueryStatus(ctx, qid)
 	if err == nil || (err != nil && err.(*SnowflakeError).Number == ErrQueryIsRunning) {
 		// the query is running. Rows object will be returned from here.
 		return sc.buildRowsForRunningQuery(ctx, qid)
 	}
-
 	return nil, err
 }
 
-func (sc *snowflakeConn) queryContextInternal(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (sc *snowflakeConn) queryContextInternal(
+	ctx context.Context,
+	query string,
+	args []driver.NamedValue) (
+	driver.Rows, error) {
 	logger.WithContext(ctx).Infof("Query: %#v, %v", query, args)
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
@@ -425,11 +400,12 @@ func (sc *snowflakeConn) queryContextInternal(ctx context.Context, query string,
 			if err != nil {
 				return nil, err
 			}
-			return nil, &SnowflakeError{
+			return nil, (&SnowflakeError{
 				Number:   code,
 				SQLState: data.Data.SQLState,
 				Message:  err.Error(),
-				QueryID:  data.Data.QueryID}
+				QueryID:  data.Data.QueryID,
+			}).exceptionTelemetry(sc)
 		}
 		return nil, err
 	}
@@ -447,10 +423,9 @@ func (sc *snowflakeConn) queryContextInternal(ctx context.Context, query string,
 		rows.monitoring = m
 	}
 
-	if sc.isMultiStmt(&data.Data) {
+	if isMultiStmt(&data.Data) {
 		// handleMultiQuery is responsible to fill rows with childResults
-		err := sc.handleMultiQuery(ctx, data.Data, rows)
-		if err != nil {
+		if err = sc.handleMultiQuery(ctx, data.Data, rows); err != nil {
 			return nil, err
 		}
 	} else {
@@ -487,7 +462,8 @@ func (sc *snowflakeConn) Ping(ctx context.Context) error {
 	noResult := isAsyncMode(ctx)
 	isDesc := isDescribeOnly(ctx)
 	// TODO: handle isInternal
-	_, err := sc.exec(ctx, "SELECT 1", noResult, false /* isInternal */, isDesc, []driver.NamedValue{})
+	_, err := sc.exec(ctx, "SELECT 1", noResult, false, /* isInternal */
+		isDesc, []driver.NamedValue{})
 	return err
 }
 
@@ -500,72 +476,26 @@ func (sc *snowflakeConn) CheckNamedValue(nv *driver.NamedValue) error {
 	return nil
 }
 
-func (sc *snowflakeConn) populateSessionParameters(parameters []nameValueParameter) {
-	// other session parameters (not all)
-	logger.WithContext(sc.ctx).Infof("params: %#v", parameters)
-	for _, param := range parameters {
-		v := ""
-		switch param.Value.(type) {
-		case int64:
-			if vv, ok := param.Value.(int64); ok {
-				v = strconv.FormatInt(vv, 10)
-			}
-		case float64:
-			if vv, ok := param.Value.(float64); ok {
-				v = strconv.FormatFloat(vv, 'g', -1, 64)
-			}
-		case bool:
-			if vv, ok := param.Value.(bool); ok {
-				v = strconv.FormatBool(vv)
-			}
-		default:
-			if vv, ok := param.Value.(string); ok {
-				v = vv
-			}
-		}
-		logger.Debugf("parameter. name: %v, value: %v", param.Name, v)
-		sc.cfg.Params[strings.ToLower(param.Name)] = &v
-	}
+func (sc *snowflakeConn) GetQueryStatus(
+	ctx context.Context,
+	queryID string) (
+	*SnowflakeQueryStatus, error) {
+	queryRet, err := sc.checkQueryStatus(ctx, queryID)
+	return &SnowflakeQueryStatus{
+		queryRet.SQLText,
+		queryRet.StartTime,
+		queryRet.EndTime,
+		queryRet.ErrorCode,
+		queryRet.ErrorMessage,
+		queryRet.Stats.ScanBytes,
+		queryRet.Stats.ProducedRows,
+	}, err
 }
 
-func (sc *snowflakeConn) isClientSessionKeepAliveEnabled() bool {
-	v, ok := sc.cfg.Params[sessionClientSessionKeepAlive]
-	if !ok {
-		return false
-	}
-	return strings.Compare(*v, "true") == 0
-}
-
-func (sc *snowflakeConn) getArrayBindStageThreshold() int {
-	v, ok := sc.cfg.Params[sessionArrayBindStageThreshold]
-	if !ok {
-		return 0
-	}
-	num, err := strconv.Atoi(*v)
-	if err != nil {
-		return 0
-	}
-	return num
-}
-
-func (sc *snowflakeConn) startHeartBeat() {
-	if !sc.isClientSessionKeepAliveEnabled() {
-		return
-	}
-	sc.rest.HeartBeat = &heartbeat{
-		restful: sc.rest,
-	}
-	sc.rest.HeartBeat.start()
-}
-
-func (sc *snowflakeConn) stopHeartBeat() {
-	if !sc.isClientSessionKeepAliveEnabled() {
-		return
-	}
-	sc.rest.HeartBeat.stop()
-}
-
-func (sc *snowflakeConn) handleMultiExec(ctx context.Context, data execResponseData) (*snowflakeResult, error) {
+func (sc *snowflakeConn) handleMultiExec(
+	ctx context.Context,
+	data execResponseData) (
+	driver.Result, error) {
 	var updatedRows int64
 	childResults := getChildResults(data.ResultIDs, data.ResultTypes)
 	for _, child := range childResults {
@@ -578,15 +508,16 @@ func (sc *snowflakeConn) handleMultiExec(ctx context.Context, data execResponseD
 				return nil, err
 			}
 			if childData != nil {
-				return nil, &SnowflakeError{
+				return nil, (&SnowflakeError{
 					Number:   code,
 					SQLState: childData.Data.SQLState,
 					Message:  err.Error(),
-					QueryID:  childData.Data.QueryID}
+					QueryID:  childData.Data.QueryID,
+				}).exceptionTelemetry(sc)
 			}
 			return nil, err
 		}
-		if sc.isDml(childData.Data.StatementTypeID) {
+		if isDml(childData.Data.StatementTypeID) {
 			count, err := updateRows(childData.Data)
 			if err != nil {
 				logger.WithContext(ctx).Errorf("error: %v", err)
@@ -595,11 +526,12 @@ func (sc *snowflakeConn) handleMultiExec(ctx context.Context, data execResponseD
 					if err != nil {
 						return nil, err
 					}
-					return nil, &SnowflakeError{
+					return nil, (&SnowflakeError{
 						Number:   code,
 						SQLState: childData.Data.SQLState,
 						Message:  err.Error(),
-						QueryID:  childData.Data.QueryID}
+						QueryID:  childData.Data.QueryID,
+					}).exceptionTelemetry(sc)
 				}
 				return nil, err
 			}
@@ -614,83 +546,19 @@ func (sc *snowflakeConn) handleMultiExec(ctx context.Context, data execResponseD
 	}, nil
 }
 
-// Fill the correspondent rows and add chunk downloader into the rows when iterate the childResults
-func (sc *snowflakeConn) handleMultiQuery(ctx context.Context, data execResponseData, rows *snowflakeRows) error {
+// Fill the corresponding rows and add chunk downloader into the rows when
+// iterating across the childResults
+func (sc *snowflakeConn) handleMultiQuery(
+	ctx context.Context,
+	data execResponseData,
+	rows *snowflakeRows) error {
 	childResults := getChildResults(data.ResultIDs, data.ResultTypes)
-
 	for _, child := range childResults {
-		err := sc.rowsForRunningQuery(ctx, child.id, rows)
-		if err != nil {
+		if err := sc.rowsForRunningQuery(ctx, child.id, rows); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func setResultType(ctx context.Context, resType resultType) context.Context {
-	return context.WithValue(ctx, snowflakeResultType, resType)
-}
-
-func getResultType(ctx context.Context) resultType {
-	return ctx.Value(snowflakeResultType).(resultType)
-}
-
-func updateRows(data execResponseData) (int64, error) {
-	var count int64
-	for i, n := 0, len(data.RowType); i < n; i++ {
-		v, err := strconv.ParseInt(*data.RowSet[0][i], 10, 64)
-		if err != nil {
-			return -1, err
-		}
-		count += v
-	}
-	return count, nil
-}
-
-type childResult struct {
-	id  string
-	typ string
-}
-
-func getChildResults(IDs string, types string) []childResult {
-	if IDs == "" {
-		return nil
-	}
-	queryIDs := strings.Split(IDs, ",")
-	resultTypes := strings.Split(types, ",")
-	res := make([]childResult, len(queryIDs))
-	for i, id := range queryIDs {
-		res[i] = childResult{id, resultTypes[i]}
-	}
-	return res
-}
-
-func (sc *snowflakeConn) getQueryResultResp(ctx context.Context, resultPath string) (*execResponse, error) {
-	headers := getHeaders()
-	if serviceName, ok := sc.cfg.Params[serviceName]; ok {
-		headers[httpHeaderServiceName] = *serviceName
-	}
-	param := make(url.Values)
-	param.Add(requestIDKey, getOrGenerateRequestIDFromContext(ctx).String())
-	param.Add("clientStartTime", strconv.FormatInt(time.Now().Unix(), 10))
-	param.Add(requestGUIDKey, uuid.New().String())
-	token, _, _ := sc.rest.TokenAccessor.GetTokens()
-	if token != "" {
-		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, token)
-	}
-	url := sc.rest.getFullURL(resultPath, &param)
-	res, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
-	if err != nil {
-		logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
-		return nil, err
-	}
-	var respd *execResponse
-	err = json.NewDecoder(res.Body).Decode(&respd)
-	if err != nil {
-		logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
-		return nil, err
-	}
-	return respd, nil
 }
 
 // getMonitoringResult fetches the result at /monitoring/queries/qid and
@@ -719,131 +587,6 @@ func (sc *snowflakeConn) getMonitoringResult(ctx context.Context, qid string, re
 	}
 
 	return nil
-}
-
-// checkQueryStatus return error==nil means the query completed successfully and there is complete query result to fetch.
-// when the GS could not return a status (when a query was just submitted GS might not be able to return a status)
-// an ErrQueryStatus will be returned.
-// Other than error==nil, There are three error types will be returned:
-// 1. ErrQueryStatus, when GS could not return any status or report error due to any reason - connection,
-// permission, etc.
-// 2, ErrQueryReportedError, if the requested query was terminated, aborted, and GS returned
-// an error status included in query.sfqueryStatusError
-// 3, ErrQueryIsRunning, if the requested query is still running and might have complete result later, these statuses
-// were listed in query.sfqueryStatusRunning
-func (sc *snowflakeConn) checkQueryStatus(ctx context.Context, qid string) error {
-	var statusResp statusResponse
-
-	err := sc.getMonitoringResult(ctx, qid, &statusResp)
-	if err != nil {
-		return err
-	}
-	if !statusResp.Success || len(statusResp.Data.Queries) == 0 {
-		logger.WithContext(ctx).Errorf("status query returned not-success or no status returned.")
-		return &SnowflakeError{
-			Number:  ErrQueryStatus,
-			Message: "status query returned not-success or no status returned. Please retry"}
-	}
-
-	var queryRet = statusResp.Data.Queries[0]
-	if queryRet.ErrorCode != 0 {
-		return &SnowflakeError{
-			Number: ErrQueryStatus,
-			Message: fmt.Sprintf("server ErrorCode=%d, ErrorMessage=%s",
-				queryRet.ErrorCode, queryRet.ErrorMessage),
-			IncludeQueryID: true,
-			QueryID:        qid,
-		}
-	}
-
-	// returned errorCode is 0. Now check what is the returned status of the query.
-	var qstatus = strToSFQueryStatus(queryRet.Status)
-	if sfqStatusIsAnError(qstatus) {
-		return &SnowflakeError{
-			Number: ErrQueryReportedError,
-			Message: fmt.Sprintf("%s: status from server: [%s]",
-				queryRet.ErrorMessage, queryRet.Status),
-			IncludeQueryID: true,
-			QueryID:        qid,
-		}
-	}
-
-	if sfqStatusIsStillRunning(qstatus) {
-		return &SnowflakeError{
-			Number: ErrQueryIsRunning,
-			Message: fmt.Sprintf("%s: status from server: [%s]",
-				queryRet.ErrorMessage, queryRet.Status),
-			IncludeQueryID: true,
-			QueryID:        qid,
-		}
-	}
-
-	//success
-	return nil
-}
-
-// Fetch query result for a query id from /queries/<qid>/result endpoint.
-func (sc *snowflakeConn) rowsForRunningQuery(ctx context.Context, qid string, rows *snowflakeRows) error {
-	resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
-	resp, err := sc.getQueryResultResp(ctx, resultPath)
-	if err != nil {
-		logger.WithContext(ctx).Errorf("error: %v", err)
-		if resp != nil {
-			code, err := strconv.Atoi(resp.Code)
-			if err != nil {
-				return err
-			}
-			return &SnowflakeError{
-				Number:   code,
-				SQLState: resp.Data.SQLState,
-				Message:  err.Error(),
-				QueryID:  resp.Data.QueryID}
-		}
-		return err
-	}
-	rows.addDownloader(populateChunkDownloader(ctx, sc, resp.Data))
-	return nil
-}
-
-// prepare a Rows object to return for query of 'qid'
-func (sc *snowflakeConn) buildRowsForRunningQuery(ctx context.Context, qid string) (driver.Rows, error) {
-	rows := new(snowflakeRows)
-	rows.sc = sc
-	rows.queryID = qid
-	err := sc.rowsForRunningQuery(ctx, qid, rows)
-	if err != nil {
-		return nil, err
-	}
-	rows.ChunkDownloader.start()
-	return rows, err
-}
-
-func isAsyncMode(ctx context.Context) bool {
-	val := ctx.Value(asyncMode)
-	if val == nil {
-		return false
-	}
-	a, ok := val.(bool)
-	return ok && a
-}
-
-func getResumeQueryID(ctx context.Context) (string, error) {
-	val := ctx.Value(fetchResultByID)
-	if val == nil {
-		return "", nil
-	}
-	strVal, ok := val.(string)
-	if !ok {
-		return "", fmt.Errorf("failed to cast val %+v to string", val)
-	}
-	// so there is a queryID in context for which we want to fetch the result
-	if !queryIDRegexp.MatchString(strVal) {
-		return strVal, &SnowflakeError{
-			Number:  ErrQueryIDFormat,
-			Message: "Invalid QID",
-			QueryID: strVal}
-	}
-	return strVal, nil
 }
 
 func getAsync(
@@ -898,9 +641,9 @@ func getAsync(
 	if respd.Success {
 		if resType == execResultType {
 			res.insertID = -1
-			if sc.isDml(respd.Data.StatementTypeID) {
+			if isDml(respd.Data.StatementTypeID) {
 				res.affectedRows, _ = updateRows(respd.Data)
-			} else if sc.isMultiStmt(&respd.Data) {
+			} else if isMultiStmt(&respd.Data) {
 				r, err := sc.handleMultiExec(ctx, respd.Data)
 				if err != nil {
 					res.errChannel <- err
@@ -919,7 +662,7 @@ func getAsync(
 		} else {
 			rows.sc = sc
 			rows.queryID = respd.Data.QueryID
-			if sc.isMultiStmt(&respd.Data) {
+			if isMultiStmt(&respd.Data) {
 				err = sc.handleMultiQuery(ctx, respd.Data, rows)
 				if err != nil {
 					rows.errChannel <- err
@@ -951,83 +694,6 @@ func getAsync(
 	}
 }
 
-func getQueryIDChan(ctx context.Context) chan<- string {
-	v := ctx.Value(queryIDChannel)
-	if v == nil {
-		return nil
-	}
-	c, _ := v.(chan<- string)
-	return c
-}
-
-func getFileStream(ctx context.Context) *bytes.Buffer {
-	s := ctx.Value(fileStreamFile)
-	r, ok := s.(io.Reader)
-	if !ok {
-		return nil
-	}
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(r)
-	return buf
-}
-
-func getFileTransferOptions(ctx context.Context) *SnowflakeFileTransferOptions {
-	v := ctx.Value(fileTransferOptions)
-	if v == nil {
-		return nil
-	}
-	o, ok := v.(*SnowflakeFileTransferOptions)
-	if !ok {
-		return nil
-	}
-	return o
-}
-
-func isDescribeOnly(ctx context.Context) bool {
-	v := ctx.Value(describeOnly)
-	if v == nil {
-		return false
-	}
-	d, ok := v.(bool)
-	return ok && d
-}
-
-// returns snowflake chunk downloader by default or stream based chunk
-// downloader if option provided through context
-func populateChunkDownloader(ctx context.Context, sc *snowflakeConn, data execResponseData) chunkDownloader {
-	if useStreamDownloader(ctx) {
-		fetcher := &httpStreamChunkFetcher{
-			ctx:      ctx,
-			client:   sc.rest.Client,
-			clientIP: sc.cfg.ClientIP,
-			headers:  data.ChunkHeaders,
-			qrmk:     data.Qrmk,
-		}
-		return newStreamChunkDownloader(ctx, fetcher, data.Total, data.RowType, data.RowSet, data.Chunks)
-	}
-
-	return &snowflakeChunkDownloader{
-		sc:                 sc,
-		ctx:                ctx,
-		CurrentChunk:       make([]chunkRowType, len(data.RowSet)),
-		ChunkMetas:         data.Chunks,
-		Total:              data.Total,
-		TotalRowIndex:      int64(-1),
-		CellCount:          len(data.RowType),
-		Qrmk:               data.Qrmk,
-		QueryResultFormat:  data.QueryResultFormat,
-		ChunkHeader:        data.ChunkHeaders,
-		FuncDownload:       downloadChunk,
-		FuncDownloadHelper: downloadChunkHelper,
-		FuncGet:            getChunk,
-		RowSet: rowSetType{
-			RowType:      data.RowType,
-			JSON:         data.RowSet,
-			RowSetBase64: data.RowSetBase64,
-		},
-	}
-}
-
 func buildSnowflakeConn(ctx context.Context, config Config) (*snowflakeConn, error) {
 	sc := &snowflakeConn{
 		SequenceCounter: 0,
@@ -1049,12 +715,25 @@ func buildSnowflakeConn(ctx context.Context, config Config) (*snowflakeConn, err
 		// use the custom transport
 		st = sc.cfg.Transporter
 	}
+	if strings.HasSuffix(sc.cfg.Host, "privatelink.snowflakecomputing.com") {
+		if err := sc.setupOCSPPrivatelink(sc.cfg.Application, sc.cfg.Host); err != nil {
+			return nil, err
+		}
+	} else {
+		if _, set := os.LookupEnv(cacheServerURLEnv); set {
+			os.Unsetenv(cacheServerURLEnv)
+		}
+	}
 	var tokenAccessor TokenAccessor
 	if sc.cfg.TokenAccessor != nil {
 		tokenAccessor = sc.cfg.TokenAccessor
 	} else {
 		tokenAccessor = getSimpleTokenAccessor()
 	}
+	if sc.cfg.DisableTelemetry {
+		sc.telemetry.enabled = false
+	}
+
 	// authenticate
 	sc.rest = &snowflakeRestful{
 		Host:     sc.cfg.Host,
@@ -1079,6 +758,12 @@ func buildSnowflakeConn(ctx context.Context, config Config) (*snowflakeConn, err
 		FuncPostAuthSAML:    postAuthSAML,
 		FuncPostAuthOKTA:    postAuthOKTA,
 		FuncGetSSO:          getSSO,
+	}
+	sc.telemetry = &snowflakeTelemetry{
+		flushSize: defaultFlushSize,
+		sr:        sc.rest,
+		mutex:     &sync.Mutex{},
+		enabled:   true,
 	}
 	return sc, nil
 }
