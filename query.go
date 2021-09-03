@@ -187,7 +187,7 @@ type ExecutionGraphData struct {
 
 type ExecutionGraphNode struct {
 	Id         int                      `json:"id"`
-	LogicalId  string                   `json:"logicalId"`
+	LogicalId  int                      `json:"logicalId"`
 	Name       string                   `json:"name"`
 	Title      string                   `json:"title"`
 	Statistics ExecutionGraphStatistics `json:"statistics"`
@@ -196,10 +196,10 @@ type ExecutionGraphNode struct {
 }
 
 type ExecutionGraphEdge struct {
-	Id   int `json:"id"`
-	Src  int `json:"src"`
-	Dst  int `json:"dst"`
-	Rows int `json:"rows"`
+	Id   string `json:"id"`
+	Src  int    `json:"src"`
+	Dst  int    `json:"dst"`
+	Rows int    `json:"rows"`
 }
 
 type ExecutionGraphGlobals struct {
@@ -211,13 +211,13 @@ type ExecutionGraphGlobals struct {
 type ExecutionGraphStatistics map[string][]ExecutionGraphStatistic
 
 type ExecutionGraphStatistic struct {
-	Name  string `json:"name"`
-	Value int    `json:"value"`
-	Unit  string `json:"unit"`
+	Name  string  `json:"name"`
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit"`
 }
 
 type ExecutionGraphWait struct {
 	Name       string  `json:"name"`
-	Value      int     `json:"value"`
+	Value      float64 `json:"value"`
 	Percentage float64 `json:"percentage"`
 }
