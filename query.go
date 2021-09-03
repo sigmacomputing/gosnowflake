@@ -186,7 +186,7 @@ type ExecutionGraphData struct {
 }
 
 type ExecutionGraphNode struct {
-	Id         string                   `json:"id"`
+	Id         int                      `json:"id"`
 	LogicalId  string                   `json:"logicalId"`
 	Name       string                   `json:"name"`
 	Title      string                   `json:"title"`
