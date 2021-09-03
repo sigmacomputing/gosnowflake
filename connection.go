@@ -8,7 +8,6 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"net/http"
 	"net/url"
 	"os"
@@ -185,29 +184,6 @@ func (sc *snowflakeConn) exec(
 	return data, err
 }
 
-func (sc *snowflakeConn) monitoring(qid string, runtime time.Duration) (*QueryMonitoringData, error) {
-	// Exit early if this was a "fast" query
-	if runtime < FetchQueryMonitoringDataThreshold {
-		return nil, nil
-	}
-
-	// Bound the GET request to 1 second in the absolute worst case.
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	var m monitoringResponse
-	err := sc.getMonitoringResult(ctx, qid, &m)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(m.Data.Queries) != 1 {
-		return nil, nil
-	}
-
-	return &m.Data.Queries[0], nil
-}
-
 func (sc *snowflakeConn) Begin() (driver.Tx, error) {
 	return sc.BeginTx(sc.ctx, driver.TxOptions{})
 }
@@ -347,6 +323,9 @@ func (sc *snowflakeConn) ExecContext(
 		if m, err := sc.monitoring(sc.QueryID, time.Since(qStart)); err == nil {
 			rows.monitoring = m
 		}
+		if qg, err := sc.queryGraph(sc.QueryID, time.Since(qStart)); err == nil {
+			rows.queryGraph = qg
+		}
 		return rows, nil
 	} else if isMultiStmt(&data.Data) {
 		return sc.handleMultiExec(ctx, data.Data)
@@ -421,6 +400,9 @@ func (sc *snowflakeConn) queryContextInternal(
 
 	if m, err := sc.monitoring(sc.QueryID, time.Since(qStart)); err == nil {
 		rows.monitoring = m
+	}
+	if qg, err := sc.queryGraph(sc.QueryID, time.Since(qStart)); err == nil {
+		rows.queryGraph = qg
 	}
 
 	if isMultiStmt(&data.Data) {
@@ -558,34 +540,6 @@ func (sc *snowflakeConn) handleMultiQuery(
 			return err
 		}
 	}
-	return nil
-}
-
-// getMonitoringResult fetches the result at /monitoring/queries/qid and
-// deserializes it into the provided res (which is given as a generic interface
-// to allow different callers to request different views on the raw response)
-func (sc *snowflakeConn) getMonitoringResult(ctx context.Context, qid string, res interface{}) error {
-	headers := make(map[string]string)
-	param := make(url.Values)
-	param.Add(requestGUIDKey, uuid.New().String())
-	if tok, _, _ := sc.rest.TokenAccessor.GetTokens(); tok != "" {
-		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, tok)
-	}
-	resultPath := fmt.Sprintf("/monitoring/queries/%s", qid)
-	url := sc.rest.getFullURL(resultPath, &param)
-
-	resp, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
-	if err != nil {
-		logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
-		return err
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(res)
-	if err != nil {
-		logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
-		return err
-	}
-
 	return nil
 }
 

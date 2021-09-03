@@ -30,6 +30,7 @@ type snowflakeResult struct {
 	err          error
 	errChannel   chan error
 	monitoring   *QueryMonitoringData
+	queryGraph   *QueryGraphData
 }
 
 func (res *snowflakeResult) LastInsertId() (int64, error) {
@@ -72,4 +73,7 @@ func (res *snowflakeResult) waitForAsyncExecStatus() error {
 
 func (res *snowflakeResult) Monitoring() *QueryMonitoringData {
 	return res.monitoring
+}
+func (res *snowflakeResult) QueryGraph() *QueryGraphData {
+	return res.queryGraph
 }

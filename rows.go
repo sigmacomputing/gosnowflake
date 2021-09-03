@@ -36,6 +36,7 @@ type snowflakeRows struct {
 	err                 error
 	errChannel          chan error
 	monitoring          *QueryMonitoringData
+	queryGraph          *QueryGraphData
 }
 
 type snowflakeValue interface{}
@@ -143,6 +144,10 @@ func (rows *snowflakeRows) GetQueryID() string {
 
 func (rows *snowflakeRows) Monitoring() *QueryMonitoringData {
 	return rows.monitoring
+}
+
+func (res *snowflakeRows) QueryGraph() *QueryGraphData {
+	return res.queryGraph
 }
 
 func (rows *snowflakeRows) GetStatus() queryStatus {

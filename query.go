@@ -159,3 +159,65 @@ type monitoringResponse struct {
 	Code    string `json:"code"`
 	Success bool   `json:"success"`
 }
+
+type queryGraphResponse struct {
+	Data    QueryGraphData `json:"data"`
+	Message string         `json:"message"`
+	Code    string         `json:"code"`
+	Success bool           `json:"success"`
+}
+
+type QueryGraphData struct {
+	Steps []QueryGraphStep `json:"steps"`
+}
+
+type QueryGraphStep struct {
+	Step           int                `json:"step"`
+	Description    string             `json:"description"`
+	TimeInMs       int                `json:"timeInMs"`
+	State          string             `json:"state"`
+	ExecutionGraph ExecutionGraphData `json:"graphData"`
+}
+
+type ExecutionGraphData struct {
+	Nodes  []ExecutionGraphNode  `json:"nodes"`
+	Edges  []ExecutionGraphEdge  `json:"edges"`
+	Global ExecutionGraphGlobals `json:"global"`
+}
+
+type ExecutionGraphNode struct {
+	Id         int                      `json:"id"`
+	LogicalId  int                      `json:"logicalId"`
+	Name       string                   `json:"name"`
+	Title      string                   `json:"title"`
+	Statistics ExecutionGraphStatistics `json:"statistics"`
+	Waits      []ExecutionGraphWait     `json:"waits"`
+	TotalStats ExecutionGraphWait       `json:"totalStats"`
+}
+
+type ExecutionGraphEdge struct {
+	Id   string `json:"id"`
+	Src  int    `json:"src"`
+	Dst  int    `json:"dst"`
+	Rows int    `json:"rows"`
+}
+
+type ExecutionGraphGlobals struct {
+	Statistics ExecutionGraphStatistics `json:"statistics"`
+	Waits      []ExecutionGraphWait     `json:"waits"`
+	TotalStats ExecutionGraphWait       `json:"totalStats"`
+}
+
+type ExecutionGraphStatistics map[string][]ExecutionGraphStatistic
+
+type ExecutionGraphStatistic struct {
+	Name  string  `json:"name"`
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit"`
+}
+
+type ExecutionGraphWait struct {
+	Name       string  `json:"name"`
+	Value      float64 `json:"value"`
+	Percentage float64 `json:"percentage"`
+}
