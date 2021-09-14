@@ -88,18 +88,32 @@ var (
 func dataTypeMode(v driver.Value) (tsmode snowflakeType, err error) {
 	if bd, ok := v.([]byte); ok {
 		switch {
+		case bytes.Equal(bd, DataTypeFixed):
+			tsmode = fixedType
+		case bytes.Equal(bd, DataTypeReal):
+			tsmode = realType
+		case bytes.Equal(bd, DataTypeText):
+			tsmode = textType
 		case bytes.Equal(bd, DataTypeDate):
 			tsmode = dateType
-		case bytes.Equal(bd, DataTypeTime):
-			tsmode = timeType
+		case bytes.Equal(bd, DataTypeVariant):
+			tsmode = variantType
 		case bytes.Equal(bd, DataTypeTimestampLtz):
 			tsmode = timestampLtzType
 		case bytes.Equal(bd, DataTypeTimestampNtz):
 			tsmode = timestampNtzType
 		case bytes.Equal(bd, DataTypeTimestampTz):
 			tsmode = timestampTzType
+		case bytes.Equal(bd, DataTypeObject):
+			tsmode = objectType
+		case bytes.Equal(bd, DataTypeArray):
+			tsmode = arrayType
 		case bytes.Equal(bd, DataTypeBinary):
 			tsmode = binaryType
+		case bytes.Equal(bd, DataTypeTime):
+			tsmode = timeType
+		case bytes.Equal(bd, DataTypeBoolean):
+			tsmode = booleanType
 		default:
 			return nullType, fmt.Errorf(errMsgInvalidByteArray, v)
 		}
