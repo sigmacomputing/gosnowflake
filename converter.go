@@ -33,16 +33,22 @@ func goTypeToSnowflake(v driver.Value, tsmode snowflakeType) snowflakeType {
 	case string:
 		return textType
 	case []byte:
-		if tsmode == binaryType {
-			return binaryType // may be redundant but ensures BINARY type
-		}
 		if t == nil {
+			if tsmode == binaryType {
+				return binaryType
+			}
 			return nullType // invalid byte array. won't take as BINARY
 		}
 		if len(t) != 1 {
+			if tsmode == binaryType {
+				return binaryType
+			}
 			return unSupportedType
 		}
 		if _, err := dataTypeMode(t); err != nil {
+			if tsmode == binaryType {
+				return binaryType
+			}
 			return unSupportedType
 		}
 		return changeType
