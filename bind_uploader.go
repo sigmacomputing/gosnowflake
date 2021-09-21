@@ -166,7 +166,6 @@ func (bu *bindUploader) createCSVRecord(data []string) []byte {
 }
 
 func getBindValues(bindings []driver.NamedValue) (map[string]execBindParameter, error) {
-	fmt.Printf("GREG got bindings %v\n", bindings)
 	idx := 1
 	var err error
 	bindValues := make(map[string]execBindParameter, len(bindings))
@@ -176,7 +175,6 @@ func getBindValues(bindings []driver.NamedValue) (map[string]execBindParameter, 
 		case SnowflakeDataType:
 			// This binding is just specifying the type for subsequent bindings
 			dataType = binding.Value.(SnowflakeDataType)
-			fmt.Printf("GREG changed dataType %v\n", dataType)
 		default:
 			// This binding is an actual parameter for the query
 			t := goTypeToSnowflake(binding.Value, dataType)

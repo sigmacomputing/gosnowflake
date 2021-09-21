@@ -26,7 +26,6 @@ func (stmt *snowflakeStmt) NumInput() int {
 
 func (stmt *snowflakeStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
 	logger.WithContext(stmt.sc.ctx).Infoln("Stmt.ExecContext")
-	logNamedValueArgs("statement.ExecContext", args)
 	return stmt.sc.ExecContext(ctx, stmt.query, args)
 }
 
@@ -37,12 +36,23 @@ func (stmt *snowflakeStmt) QueryContext(ctx context.Context, args []driver.Named
 
 func (stmt *snowflakeStmt) Exec(args []driver.Value) (driver.Result, error) {
 	logger.WithContext(stmt.sc.ctx).Infoln("Stmt.Exec")
-	logValueArgs("statement.Exec", args)
-
 	return stmt.sc.Exec(stmt.query, args)
 }
 
 func (stmt *snowflakeStmt) Query(args []driver.Value) (driver.Rows, error) {
 	logger.WithContext(stmt.sc.ctx).Infoln("Stmt.Query")
 	return stmt.sc.Query(stmt.query, args)
+}
+
+// impl NamedValueChecker for *snowflakeStmt
+func (stmt *snowflakeStmt) CheckNamedValue(nv *driver.NamedValue) (err error) {
+	switch nv.Value.(type) {
+	case SnowflakeDataType:
+		// Pass SnowflakeDataType args through without modification so that we can
+		// distinguish them from arguments of type []byte
+		return nil
+	default:
+		// For all types other than SnowflakeDataType, fall back to the default value converter
+		return driver.ErrSkip
+	}
 }

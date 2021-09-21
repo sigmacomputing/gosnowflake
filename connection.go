@@ -271,41 +271,11 @@ func (sc *snowflakeConn) PrepareContext(
 	return stmt, nil
 }
 
-func logNamedValueArgs(name string, args []driver.NamedValue) {
-	found := false
-	for _, arg := range args {
-		switch arg.Value.(type) {
-		case SnowflakeDataType:
-			found = true
-			fmt.Printf("GREG %s got data type arg: %v\n", name, arg)
-		}
-	}
-	if !found {
-		fmt.Printf("GREG %s scanned %d args, found no data types\n", name, len(args))
-	}
-}
-
-func logValueArgs(name string, args []driver.Value) {
-	found := false
-	for _, arg := range args {
-		switch arg.(type) {
-		case SnowflakeDataType:
-			found = true
-			fmt.Printf("GREG %s got data type arg: %v\n", name, arg)
-		}
-	}
-	if !found {
-		fmt.Printf("GREG %s scanned %d args, found no data types\n\n", name, len(args))
-	}
-}
-
 func (sc *snowflakeConn) ExecContext(
 	ctx context.Context,
 	query string,
 	args []driver.NamedValue) (
 	driver.Result, error) {
-	logNamedValueArgs("connection.ExecContext", args)
-
 	logger.WithContext(ctx).Infof("Exec: %#v, %v", query, args)
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
@@ -447,8 +417,6 @@ func (sc *snowflakeConn) Exec(
 	query string,
 	args []driver.Value) (
 	driver.Result, error) {
-	logValueArgs("connection.Exec", args)
-
 	return sc.ExecContext(sc.ctx, query, toNamedValues(args))
 }
 
@@ -475,6 +443,12 @@ func (sc *snowflakeConn) Ping(ctx context.Context) error {
 // CheckNamedValue determines which types are handled by this driver aside from
 // the instances captured by driver.Value
 func (sc *snowflakeConn) CheckNamedValue(nv *driver.NamedValue) error {
+	switch nv.Value.(type) {
+	case SnowflakeDataType:
+		// Pass SnowflakeDataType args through without modification so that we can
+		// distinguish them from arguments of type []byte
+		return nil
+	}
 	if supported := supportedArrayBind(nv); !supported {
 		return driver.ErrSkip
 	}
