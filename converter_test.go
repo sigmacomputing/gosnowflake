@@ -34,7 +34,6 @@ func TestGoTypeToSnowflake(t *testing.T) {
 		{in: time.Now(), tmode: DataTypeTimestampTz, out: timestampTzType},
 		{in: time.Now(), tmode: DataTypeTimestampLtz, out: timestampLtzType},
 		{in: []byte{1, 2, 3}, tmode: DataTypeBinary, out: binaryType},
-		{in: []byte{100}, tmode: nil, out: binaryType},
 		// Every explicit DataType should return changeType
 		{in: DataTypeFixed, tmode: nil, out: changeType},
 		{in: DataTypeReal, tmode: nil, out: changeType},
@@ -56,6 +55,7 @@ func TestGoTypeToSnowflake(t *testing.T) {
 		{in: uint(456), tmode: nil, out: unSupportedType},
 		{in: uint8(12), tmode: nil, out: unSupportedType},
 		{in: uint64(456), tmode: nil, out: unSupportedType},
+		{in: []byte{100}, tmode: nil, out: unSupportedType},
 		{in: nil, tmode: nil, out: unSupportedType},
 		{in: []int{1}, tmode: nil, out: unSupportedType},
 	}

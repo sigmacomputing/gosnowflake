@@ -39,8 +39,8 @@ func goTypeToSnowflake(v driver.Value, dataType SnowflakeDataType) snowflakeType
 			if t == nil {
 				return nullType // invalid byte array. won't take as BINARY
 			}
-			// If we don't have an explicit data type, assume a byte blob is binary
-			return binaryType
+			// If we don't have an explicit data type, binary blobs are unsupported
+			return unSupportedType
 		case time.Time:
 			// Default timestamp type
 			return timestampNtzType
