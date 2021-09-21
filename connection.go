@@ -278,9 +278,6 @@ func logNamedValueArgs(name string, args []driver.NamedValue) {
 		case SnowflakeDataType:
 			found = true
 			fmt.Printf("GREG %s got data type arg: %v\n", name, arg)
-		case *SnowflakeDataType:
-			found = true
-			fmt.Printf("GREG %s got * data type arg: %v\n", name, arg)
 		}
 	}
 	if !found {
@@ -295,9 +292,6 @@ func logValueArgs(name string, args []driver.Value) {
 		case SnowflakeDataType:
 			found = true
 			fmt.Printf("GREG %s got data type arg: %v\n", name, arg)
-		case *SnowflakeDataType:
-			found = true
-			fmt.Printf("GREG %s got * data type arg: %v\n", name, arg)
 		}
 	}
 	if !found {

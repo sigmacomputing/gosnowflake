@@ -170,13 +170,13 @@ func getBindValues(bindings []driver.NamedValue) (map[string]execBindParameter, 
 	idx := 1
 	var err error
 	bindValues := make(map[string]execBindParameter, len(bindings))
-	var dataType *SnowflakeDataType
+	var dataType SnowflakeDataType
 	for _, binding := range bindings {
 		switch binding.Value.(type) {
-		case *SnowflakeDataType:
+		case SnowflakeDataType:
 			// This binding is just specifying the type for subsequent bindings
-			dataType = binding.Value.(*SnowflakeDataType)
-			fmt.Printf("GREG changed dataType: %v\n", dataType)
+			dataType = binding.Value.(SnowflakeDataType)
+			fmt.Printf("GREG changed dataType %v\n", dataType)
 		default:
 			// This binding is an actual parameter for the query
 			t := goTypeToSnowflake(binding.Value, dataType)

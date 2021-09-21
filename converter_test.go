@@ -22,7 +22,6 @@ type tcGoTypeToSnowflake struct {
 	out   snowflakeType
 }
 
-/*
 func TestGoTypeToSnowflake(t *testing.T) {
 	testcases := []tcGoTypeToSnowflake{
 		{in: int64(123), tmode: nil, out: fixedType},
@@ -66,7 +65,7 @@ func TestGoTypeToSnowflake(t *testing.T) {
 			t.Errorf("failed. in: %v, tmode: %v, expected: %v, got: %v", test.in, test.tmode, test.out, a)
 		}
 	}
-  }*/
+}
 
 type tcSnowflakeTypeToGo struct {
 	in    snowflakeType

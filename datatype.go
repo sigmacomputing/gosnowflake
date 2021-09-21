@@ -65,64 +65,64 @@ func (dt SnowflakeDataType) Equals(o SnowflakeDataType) bool {
 
 var (
 	// DataTypeFixed is a FIXED datatype.
-	DataTypeFixed = &SnowflakeDataType{fixedType.Byte()}
+	DataTypeFixed = SnowflakeDataType{fixedType.Byte()}
 	// DataTypeReal is a REAL datatype.
-	DataTypeReal = &SnowflakeDataType{realType.Byte()}
+	DataTypeReal = SnowflakeDataType{realType.Byte()}
 	// DataTypeText is a TEXT datatype.
-	DataTypeText = &SnowflakeDataType{textType.Byte()}
+	DataTypeText = SnowflakeDataType{textType.Byte()}
 	// DataTypeDate is a Date datatype.
-	DataTypeDate = &SnowflakeDataType{dateType.Byte()}
+	DataTypeDate = SnowflakeDataType{dateType.Byte()}
 	// DataTypeVariant is a TEXT datatype.
-	DataTypeVariant = &SnowflakeDataType{variantType.Byte()}
+	DataTypeVariant = SnowflakeDataType{variantType.Byte()}
 	// DataTypeTimestampLtz is a TIMESTAMP_LTZ datatype.
-	DataTypeTimestampLtz = &SnowflakeDataType{timestampLtzType.Byte()}
+	DataTypeTimestampLtz = SnowflakeDataType{timestampLtzType.Byte()}
 	// DataTypeTimestampNtz is a TIMESTAMP_NTZ datatype.
-	DataTypeTimestampNtz = &SnowflakeDataType{timestampNtzType.Byte()}
+	DataTypeTimestampNtz = SnowflakeDataType{timestampNtzType.Byte()}
 	// DataTypeTimestampTz is a TIMESTAMP_TZ datatype.
-	DataTypeTimestampTz = &SnowflakeDataType{timestampTzType.Byte()}
+	DataTypeTimestampTz = SnowflakeDataType{timestampTzType.Byte()}
 	// DataTypeObject is a OBJECT datatype.
-	DataTypeObject = &SnowflakeDataType{objectType.Byte()}
+	DataTypeObject = SnowflakeDataType{objectType.Byte()}
 	// DataTypeArray is a ARRAY datatype.
-	DataTypeArray = &SnowflakeDataType{arrayType.Byte()}
+	DataTypeArray = SnowflakeDataType{arrayType.Byte()}
 	// DataTypeBinary is a BINARY datatype.
-	DataTypeBinary = &SnowflakeDataType{binaryType.Byte()}
+	DataTypeBinary = SnowflakeDataType{binaryType.Byte()}
 	// DataTypeTime is a TIME datatype.
-	DataTypeTime = &SnowflakeDataType{timeType.Byte()}
+	DataTypeTime = SnowflakeDataType{timeType.Byte()}
 	// DataTypeBoolean is a BOOLEAN datatype.
-	DataTypeBoolean = &SnowflakeDataType{booleanType.Byte()}
+	DataTypeBoolean = SnowflakeDataType{booleanType.Byte()}
 )
 
-func clientTypeToInternal(cType *SnowflakeDataType) (iType snowflakeType, err error) {
-	if cType != nil && *cType != nil {
+func clientTypeToInternal(cType SnowflakeDataType) (iType snowflakeType, err error) {
+	if cType != nil {
 		switch {
-		case (*cType).Equals(*DataTypeFixed):
+		case cType.Equals(DataTypeFixed):
 			iType = fixedType
-		case (*cType).Equals(*DataTypeReal):
+		case cType.Equals(DataTypeReal):
 			iType = realType
-		case (*cType).Equals(*DataTypeText):
+		case cType.Equals(DataTypeText):
 			iType = textType
-		case (*cType).Equals(*DataTypeDate):
+		case cType.Equals(DataTypeDate):
 			iType = dateType
-		case (*cType).Equals(*DataTypeVariant):
+		case cType.Equals(DataTypeVariant):
 			iType = variantType
-		case (*cType).Equals(*DataTypeTimestampLtz):
+		case cType.Equals(DataTypeTimestampLtz):
 			iType = timestampLtzType
-		case (*cType).Equals(*DataTypeTimestampNtz):
+		case cType.Equals(DataTypeTimestampNtz):
 			iType = timestampNtzType
-		case (*cType).Equals(*DataTypeTimestampTz):
+		case cType.Equals(DataTypeTimestampTz):
 			iType = timestampTzType
-		case (*cType).Equals(*DataTypeObject):
+		case cType.Equals(DataTypeObject):
 			iType = objectType
-		case (*cType).Equals(*DataTypeArray):
+		case cType.Equals(DataTypeArray):
 			iType = arrayType
-		case (*cType).Equals(*DataTypeBinary):
+		case cType.Equals(DataTypeBinary):
 			iType = binaryType
-		case (*cType).Equals(*DataTypeTime):
+		case cType.Equals(DataTypeTime):
 			iType = timeType
-		case (*cType).Equals(*DataTypeBoolean):
+		case cType.Equals(DataTypeBoolean):
 			iType = booleanType
 		default:
-			return nullType, fmt.Errorf(errMsgInvalidByteArray, ([]byte)(*cType))
+			return nullType, fmt.Errorf(errMsgInvalidByteArray, ([]byte)(cType))
 		}
 	} else {
 		return nullType, fmt.Errorf(errMsgInvalidByteArray, nil)

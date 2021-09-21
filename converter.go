@@ -22,10 +22,10 @@ import (
 const format = "2006-01-02 15:04:05.999999999"
 
 // goTypeToSnowflake translates Go data type to Snowflake data type.
-func goTypeToSnowflake(v driver.Value, dataType *SnowflakeDataType) snowflakeType {
+func goTypeToSnowflake(v driver.Value, dataType SnowflakeDataType) snowflakeType {
 	if dataType == nil {
 		switch t := v.(type) {
-		case *SnowflakeDataType:
+		case SnowflakeDataType:
 			return changeType
 		case int64:
 			return fixedType
@@ -84,7 +84,7 @@ func snowflakeTypeToGo(dbtype snowflakeType, scale int64) reflect.Type {
 
 // valueToString converts arbitrary golang type to a string. This is mainly used in binding data with placeholders
 // in queries.
-func valueToString(v driver.Value, dataType *SnowflakeDataType) (*string, error) {
+func valueToString(v driver.Value, dataType SnowflakeDataType) (*string, error) {
 	logger.Debugf("TYPE: %v, %v", reflect.TypeOf(v), reflect.ValueOf(v))
 	if v == nil {
 		return nil, nil
@@ -108,7 +108,7 @@ func valueToString(v driver.Value, dataType *SnowflakeDataType) (*string, error)
 			return nil, nil
 		}
 		if bd, ok := v.([]byte); ok {
-			if dataType != nil && *dataType != nil && (*dataType).Equals(*DataTypeBinary) {
+			if dataType != nil && dataType.Equals(DataTypeBinary) {
 				s := hex.EncodeToString(bd)
 				return &s, nil
 			}
@@ -119,19 +119,19 @@ func valueToString(v driver.Value, dataType *SnowflakeDataType) (*string, error)
 	case reflect.Struct:
 		if tm, ok := v.(time.Time); ok && dataType != nil {
 			switch {
-			case (*dataType).Equals(*DataTypeDate):
+			case dataType.Equals(DataTypeDate):
 				_, offset := tm.Zone()
 				tm = tm.Add(time.Second * time.Duration(offset))
 				s := fmt.Sprintf("%d", tm.Unix()*1000)
 				return &s, nil
-			case (*dataType).Equals(*DataTypeTime):
+			case dataType.Equals(DataTypeTime):
 				s := fmt.Sprintf("%d",
 					(tm.Hour()*3600+tm.Minute()*60+tm.Second())*1e9+tm.Nanosecond())
 				return &s, nil
-			case (*dataType).Equals(*DataTypeTimestampNtz) || (*dataType).Equals(*DataTypeTimestampLtz):
+			case dataType.Equals(DataTypeTimestampNtz) || dataType.Equals(DataTypeTimestampLtz):
 				s := fmt.Sprintf("%d", tm.UnixNano())
 				return &s, nil
-			case (*dataType).Equals(*DataTypeTimestampTz):
+			case dataType.Equals(DataTypeTimestampTz):
 				_, offset := tm.Zone()
 				s := fmt.Sprintf("%v %v", tm.UnixNano(), offset/60+1440)
 				return &s, nil

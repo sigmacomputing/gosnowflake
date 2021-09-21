@@ -2,13 +2,17 @@
 
 package gosnowflake
 
+import (
+	"fmt"
+	"testing"
+)
+
 type tcDataTypeMode struct {
 	tp    SnowflakeDataType
 	tmode snowflakeType
 	err   error
 }
 
-/*
 func TestClientTypeToInternal(t *testing.T) {
 	var testcases = []tcDataTypeMode{
 		{tp: DataTypeFixed, tmode: fixedType, err: nil},
@@ -43,5 +47,3 @@ func TestClientTypeToInternal(t *testing.T) {
 		}
 	}
 }
-
-*/
