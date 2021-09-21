@@ -43,16 +43,3 @@ func (stmt *snowflakeStmt) Query(args []driver.Value) (driver.Rows, error) {
 	logger.WithContext(stmt.sc.ctx).Infoln("Stmt.Query")
 	return stmt.sc.Query(stmt.query, args)
 }
-
-// impl NamedValueChecker for *snowflakeStmt
-func (stmt *snowflakeStmt) CheckNamedValue(nv *driver.NamedValue) (err error) {
-	switch nv.Value.(type) {
-	case SnowflakeDataType:
-		// Pass SnowflakeDataType args through without modification so that we can
-		// distinguish them from arguments of type []byte
-		return nil
-	default:
-		// For all types other than SnowflakeDataType, fall back to the default value converter
-		return driver.ErrSkip
-	}
-}
