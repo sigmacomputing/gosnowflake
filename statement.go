@@ -26,6 +26,7 @@ func (stmt *snowflakeStmt) NumInput() int {
 
 func (stmt *snowflakeStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
 	logger.WithContext(stmt.sc.ctx).Infoln("Stmt.ExecContext")
+	logNamedValueArgs("statement.ExecContext", args)
 	return stmt.sc.ExecContext(ctx, stmt.query, args)
 }
 
@@ -36,6 +37,8 @@ func (stmt *snowflakeStmt) QueryContext(ctx context.Context, args []driver.Named
 
 func (stmt *snowflakeStmt) Exec(args []driver.Value) (driver.Result, error) {
 	logger.WithContext(stmt.sc.ctx).Infoln("Stmt.Exec")
+	logValueArgs("statement.Exec", args)
+
 	return stmt.sc.Exec(stmt.query, args)
 }
 
