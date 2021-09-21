@@ -138,7 +138,6 @@ func valueToString(v driver.Value, dataType SnowflakeDataType) (*string, error) 
 			}
 		}
 	}
-	fmt.Printf("GREG v: %v\tv1:%v\tdataType: %v\n", v, v1, dataType)
 	return nil, fmt.Errorf("unsupported type: %v", v1.Kind())
 }
 

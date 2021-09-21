@@ -54,11 +54,13 @@ func getSnowflakeType(typ string) snowflakeType {
 	return nullType
 }
 
-// Real solution: these should just be a separate public-facing type so that we
-// can always differentiate between "change type" and "value" args
-
+// SnowflakeDataType is the type used by clients to explicitly indicate the type
+// of an argument to ExecContext and friends. We use a separate public-facing
+// type rather than a Go primitive type so that we can always differentiate
+// between args that indicate type and args that are values.
 type SnowflakeDataType []byte
 
+// Equals checks if dt and o represent the same type indicator
 func (dt SnowflakeDataType) Equals(o SnowflakeDataType) bool {
 	return bytes.Equal(([]byte)(dt), ([]byte)(o))
 }
