@@ -416,7 +416,10 @@ func fillMissingConfigParameters(cfg *Config) error {
 		cfg.ValidateDefaultParameters = ConfigBoolTrue
 	}
 
-	fmt.Printf("GREG got cfg: %+v\n", cfg)
+	fmt.Printf("GREG using ClientTimeout: %v\n", cfg.ClientTimeout)
+	if cfg.ClientTimeout > 1*time.Minute {
+		panic("Timeout too high!")
+	}
 
 	if strings.HasSuffix(cfg.Host, defaultDomain) && len(cfg.Host) == len(defaultDomain) {
 		return &SnowflakeError{
