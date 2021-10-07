@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -417,9 +418,7 @@ func fillMissingConfigParameters(cfg *Config) error {
 	}
 
 	fmt.Printf("GREG using ClientTimeout: %v\n", cfg.ClientTimeout)
-	if cfg.ClientTimeout > 1*time.Minute {
-		panic("Timeout too high!")
-	}
+	debug.PrintStack()
 
 	if strings.HasSuffix(cfg.Host, defaultDomain) && len(cfg.Host) == len(defaultDomain) {
 		return &SnowflakeError{
