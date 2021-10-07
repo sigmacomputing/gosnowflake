@@ -154,6 +154,9 @@ func DSN(cfg *Config) (dsn string, err error) {
 	if cfg.PasscodeInPassword {
 		params.Add("passcodeInPassword", strconv.FormatBool(cfg.PasscodeInPassword))
 	}
+	if cfg.ClientTimeout != defaultClientTimeout {
+		params.Add("clientTimeout", strconv.FormatInt(int64(cfg.ClientTimeout/time.Second), 10))
+	}
 	if cfg.LoginTimeout != defaultLoginTimeout {
 		params.Add("loginTimeout", strconv.FormatInt(int64(cfg.LoginTimeout/time.Second), 10))
 	}
