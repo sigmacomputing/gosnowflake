@@ -50,9 +50,15 @@ func runningOnGithubAction() bool {
 
 var logger = CreateDefaultLogger()
 
+const logLevelEnvFlag = "GSNOWFLAKE_LOG_LEVEL"
+
 func init() {
 	sql.Register("snowflake", &SnowflakeDriver{})
-	logger.SetLogLevel("error")
+	logLevel := "error"
+	if os.Getenv(logLevelEnvFlag) != "" {
+		logLevel = os.Getenv(logLevelEnvFlag)
+	}
+	logger.SetLogLevel(logLevel)
 	if runningOnGithubAction() {
 		logger.SetLogLevel("fatal")
 	}
