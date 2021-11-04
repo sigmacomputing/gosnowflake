@@ -334,6 +334,8 @@ func queryGraph(
 // deserializes it into the provided res (which is given as a generic interface
 // to allow different callers to request different views on the raw response)
 func (sc *snowflakeConn) getMonitoringResult(ctx context.Context, endpoint, qid string, res interface{}) (*http.Response, error) {
+	sc.restMu.RLock()
+	defer sc.restMu.RUnlock()
 	headers := make(map[string]string)
 	param := make(url.Values)
 	param.Add(requestGUIDKey, NewUUID().String())

@@ -81,6 +81,7 @@ type snowflakeConn struct {
 	ctx                 context.Context
 	cfg                 *Config
 	rest                *snowflakeRestful
+	restMu              sync.RWMutex // guard shutdown race
 	SequenceCounter     uint64
 	QueryID             string
 	SQLState            string
@@ -295,6 +296,8 @@ func (sc *snowflakeConn) cleanup() {
 	if sc.rest != nil && sc.rest.Client != nil {
 		sc.rest.Client.CloseIdleConnections()
 	}
+	sc.restMu.Lock()
+	defer sc.restMu.Unlock()
 	sc.rest = nil
 	sc.cfg = nil
 
