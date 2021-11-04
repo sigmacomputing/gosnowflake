@@ -68,16 +68,16 @@ var (
 )
 
 type snowflakeConn struct {
-	ctx               context.Context
-	cfg               *Config
-	rest              *snowflakeRestful
-	SequenceCounter   uint64
-	telemetry         *snowflakeTelemetry
-	internal          InternalClient
-	queryContextCache *queryContextCache
-	QueryID           string
-	SQLState          string
-	execRespCache     *execRespCache
+	ctx             context.Context
+	cfg             *Config
+	rest            *snowflakeRestful
+	restMu          sync.RWMutex
+	SequenceCounter uint64
+	QueryID         string
+	SQLState        string
+	telemetry       *snowflakeTelemetry
+	internal        InternalClient
+	execRespCache   *execRespCache
 }
 
 var (
@@ -236,6 +236,8 @@ func (sc *snowflakeConn) cleanup() {
 	if sc.rest != nil && sc.rest.Client != nil {
 		sc.rest.Client.CloseIdleConnections()
 	}
+	sc.restMu.Lock()
+	defer sc.restMu.Unlock()
 	sc.rest = nil
 	sc.cfg = nil
 
