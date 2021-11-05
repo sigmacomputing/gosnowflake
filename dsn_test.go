@@ -728,7 +728,7 @@ func TestDSN(t *testing.T) {
 				RequestTimeout:     300 * time.Second,
 				Application:        "special go",
 			},
-			dsn: "u:p@a.b.snowflakecomputing.com:443?application=special+go&database=db&loginTimeout=10&ocspFailOpen=true&queryMonitoringThreshold=5&passcode=db&passcodeInPassword=true&region=b&requestTimeout=300&role=ro&schema=sc&validateDefaultParameters=true",
+			dsn: "u:p@a.b.snowflakecomputing.com:443?application=special+go&database=db&loginTimeout=10&ocspFailOpen=true&passcode=db&passcodeInPassword=true&queryMonitoringThreshold=5&region=b&requestTimeout=300&role=ro&schema=sc&validateDefaultParameters=true",
 		},
 		{
 			cfg: &Config{
