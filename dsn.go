@@ -19,7 +19,6 @@ const (
 	defaultLoginTimeout             = 60 * time.Second  // Timeout for retry for login EXCLUDING clientTimeout
 	defaultRequestTimeout           = 0 * time.Second   // Timeout for retry for request EXCLUDING clientTimeout
 	defaultJWTTimeout               = 60 * time.Second
-	defaultQueryMonitoringThreshold = 5 * time.Second
 	defaultDomain                   = ".snowflakecomputing.com"
 )
 
@@ -426,10 +425,6 @@ func fillMissingConfigParameters(cfg *Config) error {
 
 	if cfg.ValidateDefaultParameters == configBoolNotSet {
 		cfg.ValidateDefaultParameters = ConfigBoolTrue
-	}
-
-	if cfg.QueryMonitoringThreshold == 0 {
-		cfg.QueryMonitoringThreshold = defaultQueryMonitoringThreshold
 	}
 
 	if strings.HasSuffix(cfg.Host, defaultDomain) && len(cfg.Host) == len(defaultDomain) {
