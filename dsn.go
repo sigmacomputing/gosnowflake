@@ -15,12 +15,12 @@ import (
 )
 
 const (
-	defaultClientTimeout  = 900 * time.Second // Timeout for network round trip + read out http response
-	defaultLoginTimeout   = 60 * time.Second  // Timeout for retry for login EXCLUDING clientTimeout
-	defaultRequestTimeout = 0 * time.Second   // Timeout for retry for request EXCLUDING clientTimeout
-	defaultJWTTimeout     = 60 * time.Second
+	defaultClientTimeout            = 900 * time.Second // Timeout for network round trip + read out http response
+	defaultLoginTimeout             = 60 * time.Second  // Timeout for retry for login EXCLUDING clientTimeout
+	defaultRequestTimeout           = 0 * time.Second   // Timeout for retry for request EXCLUDING clientTimeout
+	defaultJWTTimeout               = 60 * time.Second
 	defaultQueryMonitoringThreshold = 5 * time.Second
-	defaultDomain         = ".snowflakecomputing.com"
+	defaultDomain                   = ".snowflakecomputing.com"
 )
 
 // ConfigBool is a type to represent true or false in the Config
