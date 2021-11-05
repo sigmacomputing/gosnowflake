@@ -280,7 +280,7 @@ func (r *retryHTTP) execute() (res *http.Response, err error) {
 					return nil, err
 				}
 				if res != nil && res.Request != nil {
-					return nil, fmt.Errorf("timeout after %s. HTTP Status: %v. Header: %v. request: %v. body: %s. Hanging?", r.timeout, res.StatusCode, res.Header, res.Request.URL, sampledResponseBody)
+					return nil, fmt.Errorf("timeout after %s. HTTP Status: %v. Header: %v. request: %v. body: %s. Hanging?\n", r.timeout, res.StatusCode, res.Header, res.Request.URL, sampledResponseBody)
 				}
 				return nil, fmt.Errorf("timeout after %s. Hanging?", r.timeout)
 			}
@@ -307,7 +307,7 @@ func (r *retryHTTP) execute() (res *http.Response, err error) {
 		case <-r.ctx.Done():
 			await.Stop()
 			if res != nil && res.Request != nil {
-				logger.WithContext(r.ctx).Infof("abandoning request: retry-count: %d. headers: %v. request: %v. body: %s", retryCounter, res.Header, res.Request.URL, sampledResponseBody)
+				logger.WithContext(r.ctx).Infof("abandoning request: retry-count: %d. headers: %v. request: %v. body: %s\n", retryCounter, res.Header, res.Request.URL, sampledResponseBody)
 			} else {
 				logger.WithContext(r.ctx).Infof("abandoning request: retry-count: %d.", retryCounter)
 			}

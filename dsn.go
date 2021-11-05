@@ -19,6 +19,7 @@ const (
 	defaultLoginTimeout   = 60 * time.Second  // Timeout for retry for login EXCLUDING clientTimeout
 	defaultRequestTimeout = 0 * time.Second   // Timeout for retry for request EXCLUDING clientTimeout
 	defaultJWTTimeout     = 60 * time.Second
+	defaultQueryMonitoringThreshold = 5 * time.Second
 	defaultDomain         = ".snowflakecomputing.com"
 )
 
@@ -200,6 +201,8 @@ func DSN(cfg *Config) (dsn string, err error) {
 	params.Add("ocspFailOpen", strconv.FormatBool(cfg.OCSPFailOpen != OCSPFailOpenFalse))
 
 	params.Add("validateDefaultParameters", strconv.FormatBool(cfg.ValidateDefaultParameters != ConfigBoolFalse))
+
+	params.Add("queryMonitoringThreshold", strconv.FormatInt(int64(cfg.QueryMonitoringThreshold/time.Second), 10))
 
 	dsn = fmt.Sprintf("%v:%v@%v:%v", url.QueryEscape(cfg.User), url.QueryEscape(cfg.Password), cfg.Host, cfg.Port)
 	if params.Encode() != "" {
@@ -425,6 +428,10 @@ func fillMissingConfigParameters(cfg *Config) error {
 		cfg.ValidateDefaultParameters = ConfigBoolTrue
 	}
 
+	if cfg.QueryMonitoringThreshold == 0 {
+		cfg.QueryMonitoringThreshold = defaultQueryMonitoringThreshold
+	}
+
 	if strings.HasSuffix(cfg.Host, defaultDomain) && len(cfg.Host) == len(defaultDomain) {
 		return &SnowflakeError{
 			Number:      ErrCodeFailedToParseHost,
@@ -609,6 +616,11 @@ func parseDSNParams(cfg *Config, params string) (err error) {
 				cfg.ValidateDefaultParameters = ConfigBoolTrue
 			} else {
 				cfg.ValidateDefaultParameters = ConfigBoolFalse
+			}
+		case "queryMonitoringThreshold":
+			cfg.QueryMonitoringThreshold, err = parseTimeout(value)
+			if err != nil {
+				return
 			}
 		default:
 			if cfg.Params == nil {
