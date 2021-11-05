@@ -51,14 +51,6 @@ const (
 	queryResultType     resultType = "query"
 )
 
-var (
-	// FetchQueryMonitoringDataThreshold specifies the threshold, over which we'll fetch the monitoring
-	// data for a Snowflake query. We use a time-based threshold, since there is a non-zero latency cost
-	// to fetch this data and we want to bound the additional latency. By default we bound to a 2% increase
-	// in latency - assuming worst case 100ms - when fetching this metadata.
-	FetchQueryMonitoringDataThreshold time.Duration = 5 * time.Second
-)
-
 type snowflakeConn struct {
 	ctx             context.Context
 	cfg             *Config
