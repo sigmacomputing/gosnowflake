@@ -15,8 +15,9 @@ const responseBodySampleSize = "GOSNOWFLAKE_RESPONSE_SAMPLE_SIZE"
 // whether to dump details for retries.
 const verboseRetryLogging = "GOSNOWFLAKE_VERBOSE_RETRY_LOGGING"
 
-const ctxEnvFlagsKey = "go-sf-env-var-flags"
+type ctxEnvFlagsKey struct{}
 
+// ReadEnvIntFlag gets an integer value from specified env-var.
 func ReadEnvIntFlag(flagName string) int64 {
 	flagVal := os.Getenv(flagName)
 	if flagVal == "" {
@@ -25,11 +26,11 @@ func ReadEnvIntFlag(flagName string) int64 {
 	intVal, err := strconv.ParseInt(flagVal, 10, 64)
 	if err != nil {
 		return 0
-	} else {
-		return intVal
 	}
+	return intVal
 }
 
+// ReadEnvBoolFlag gets a boolean value from specified env-var.
 func ReadEnvBoolFlag(flagName string) bool {
 	flagVal := os.Getenv(flagName)
 	if flagVal == "" {
@@ -38,22 +39,23 @@ func ReadEnvBoolFlag(flagName string) bool {
 	boolVal, err := strconv.ParseBool(flagVal)
 	if err != nil {
 		return false
-	} else {
-		return boolVal
 	}
+	return boolVal
 }
 
-type EnvFlags map[string]interface{}
+type envFlags map[string]interface{}
 
+// AddEnvFlags stores a map of env-var values into the supplied context.
 func AddEnvFlags(ctx context.Context) context.Context {
-	envFlags := make(EnvFlags)
+	envFlags := make(envFlags)
 	envFlags[responseBodySampleSize] = ReadEnvIntFlag(responseBodySampleSize)
 	envFlags[verboseRetryLogging] = ReadEnvBoolFlag(verboseRetryLogging)
-	return context.WithValue(ctx, ctxEnvFlagsKey, envFlags)
+	return context.WithValue(ctx, ctxEnvFlagsKey{}, envFlags)
 }
 
+// GetEnvIntFlag retrieves a specified integer flag value from the supplied context.
 func GetEnvIntFlag(ctx context.Context, flagName string) (int64, bool) {
-	envFlags, ok := ctx.Value(ctxEnvFlagsKey).(EnvFlags)
+	envFlags, ok := ctx.Value(ctxEnvFlagsKey{}).(envFlags)
 	if !ok {
 		return 0, false
 	}
@@ -65,8 +67,9 @@ func GetEnvIntFlag(ctx context.Context, flagName string) (int64, bool) {
 	return i, ok
 }
 
+// GetEnvBoolFlag retrieves a specified boolean flag value from the supplied context.
 func GetEnvBoolFlag(ctx context.Context, flagName string) (bool, bool) {
-	envFlags, ok := ctx.Value(ctxEnvFlagsKey).(EnvFlags)
+	envFlags, ok := ctx.Value(ctxEnvFlagsKey{}).(envFlags)
 	if !ok {
 		return false, false
 	}
