@@ -208,9 +208,12 @@ func (r *retryHTTP) setBody(body []byte) *retryHTTP {
 	return r
 }
 
-const numSampledResponseBodyBytes = 5 * 1024
+func getBodyTrace(ctx context.Context, res *http.Response) []byte {
+	numSampledResponseBodyBytes, ok := GetEnvIntFlag(ctx, responseBodySampleSize)
+	if !ok {
+		return make([]byte, 0)
+	}
 
-func getBodyTrace(res *http.Response) []byte {
 	sampleReader := io.LimitReader(res.Body, numSampledResponseBodyBytes)
 	sampledResponseBytes := make([]byte, numSampledResponseBodyBytes)
 	sampleReader.Read(sampledResponseBytes)
