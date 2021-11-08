@@ -10,10 +10,10 @@ import (
 // 0 => don't log anything
 // -1 => no limit to logging
 // a valid positive number => log response body bytes up to that number
-const responseBodySampleSize = "GOSF_RESPONSE_SAMPLE_SIZE"
+const responseBodySampleSize = "GOSNOWFLAKE_RESPONSE_SAMPLE_SIZE"
 
 // whether to dump details for retries.
-const verboseRetryLogging = "GOSF_VERBOSE_RETRY_LOGGING"
+const verboseRetryLogging = "GOSNOWFLAKE_VERBOSE_RETRY_LOGGING"
 
 const ctxEnvFlagsKey = "go-sf-env-var-flags"
 
