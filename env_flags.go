@@ -49,7 +49,6 @@ func AddEnvFlags(ctx context.Context) context.Context {
 	envFlags := make(EnvFlags)
 	envFlags[responseBodySampleSize] = ReadEnvIntFlag(responseBodySampleSize)
 	envFlags[verboseRetryLogging] = ReadEnvBoolFlag(verboseRetryLogging)
-	logger.WithContext(ctx).Infof("Debug: env-flags: %v\n", envFlags)
 	return context.WithValue(ctx, ctxEnvFlagsKey, envFlags)
 }
 
@@ -63,7 +62,6 @@ func GetEnvIntFlag(ctx context.Context, flagName string) (int64, bool) {
 		return 0, false
 	}
 	i, ok := val.(int64)
-	logger.WithContext(ctx).Infof("Debug: int flag %s evaluated to %v\n", flagName, i)
 	return i, ok
 }
 
@@ -77,6 +75,5 @@ func GetEnvBoolFlag(ctx context.Context, flagName string) (bool, bool) {
 		return false, false
 	}
 	b, ok := val.(bool)
-	logger.WithContext(ctx).Infof("Debug: bool flag %s evaluated to %v\n", flagName, b)
 	return b, ok
 }
