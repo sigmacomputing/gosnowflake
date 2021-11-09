@@ -8,7 +8,6 @@ import (
 
 // whether and how much to log, for a response-body.
 // 0 => don't log anything
-// -1 => no limit to logging
 // a valid positive number => log response body bytes up to that number
 const responseBodySampleSize = "GOSNOWFLAKE_RESPONSE_SAMPLE_SIZE"
 
