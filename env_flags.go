@@ -50,6 +50,9 @@ func AddEnvFlags(ctx context.Context) context.Context {
 	envFlags := make(envFlags)
 	envFlags[responseBodySampleSize] = ReadEnvIntFlag(responseBodySampleSize)
 	envFlags[verboseRetryLogging] = ReadEnvBoolFlag(verboseRetryLogging)
+
+	logger.WithContext(ctx).Infof("Loaded environment flags: %v", envFlags)
+
 	return context.WithValue(ctx, ctxEnvFlagsKey{}, envFlags)
 }
 
