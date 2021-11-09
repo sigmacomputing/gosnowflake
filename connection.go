@@ -642,7 +642,7 @@ func getAsync(
 func buildSnowflakeConn(ctx context.Context, config Config) (*snowflakeConn, error) {
 	sc := &snowflakeConn{
 		SequenceCounter: 0,
-		ctx:             ctx,
+		ctx:             AddEnvFlags(ctx),
 		cfg:             &config,
 	}
 	var st http.RoundTripper = SnowflakeTransport
