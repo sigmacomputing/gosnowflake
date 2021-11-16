@@ -263,9 +263,14 @@ func (r *retryHTTP) execute() (res *http.Response, err error) {
 				break
 			}
 			sampledResponseBody = getBodyTrace(r.ctx, res)
-			if shouldDumpResponseInfo && res.Request != nil {
-				logger.WithContext(r.ctx).Warningf(
-					"failed http connection. HTTP Status: %v. headers %v. request %v. body %s. retrying...\n", res.StatusCode, res.Header, res.Request.URL, sampledResponseBody)
+			if shouldDumpResponseInfo {
+				if res.Request != nil {
+					logger.WithContext(r.ctx).Warningf(
+						"failed http connection. HTTP Status: %v. headers %v. request %v. body %s. retrying...\n", res.StatusCode, res.Header, res.Request.URL, sampledResponseBody)
+				} else {
+					logger.WithContext(r.ctx).Warningf(
+						"failed http connection. HTTP Status: %v. headers %v. body %s. retrying...\n", res.StatusCode, res.Header, sampledResponseBody)
+				}
 			} else {
 				logger.WithContext(r.ctx).Warningf(
 					"failed http connection. HTTP Status: %v. retrying...\n", res.StatusCode)
@@ -284,8 +289,11 @@ func (r *retryHTTP) execute() (res *http.Response, err error) {
 					return nil, err
 				}
 				if res != nil {
-					if shouldDumpResponseInfo && res.Request != nil {
-						return nil, fmt.Errorf("timeout after %s. HTTP Status: %v. Header: %v. request: %v. body: %s. Hanging?", r.timeout, res.StatusCode, res.Header, res.Request.URL, sampledResponseBody)
+					if shouldDumpResponseInfo {
+						if res.Request != nil {
+							return nil, fmt.Errorf("timeout after %s. HTTP Status: %v. Header: %v. request: %v. body: %s. Hanging?", r.timeout, res.StatusCode, res.Header, res.Request.URL, sampledResponseBody)
+						}
+						return nil, fmt.Errorf("timeout after %s. HTTP Status: %v. Header: %v. body: %s. Hanging?", r.timeout, res.StatusCode, res.Header, sampledResponseBody)
 					}
 					return nil, fmt.Errorf("timeout after %s. HTTP Status: %v. Hanging?", r.timeout, res.StatusCode)
 				}
