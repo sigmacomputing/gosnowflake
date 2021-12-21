@@ -400,6 +400,8 @@ func (sc *snowflakeConn) queryContextInternal(
 		rows.addDownloader(populateChunkDownloader(ctx, sc, data.Data))
 	}
 
+	// SIG-16907: we occasionally panic on a nil value here, adding tracing to help diagnose.
+	logger.WithContext(ctx).Infof("Debug: rows chunk-downloader nil?: %v, is-multi-stmt? %v, err: %v", rows.ChunkDownloader == nil, isMultiStmt(&data.Data), err)
 	rows.ChunkDownloader.start()
 	return rows, err
 }
