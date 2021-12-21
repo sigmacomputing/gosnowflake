@@ -402,10 +402,10 @@ func (sc *snowflakeConn) queryContextInternal(
 
 	// SIG-16907: we occasionally panic on a nil value here, adding tracing to help diagnose.
 	if rows == nil {
-		logger.WithContext(ctx).Infof("Debug: rows nil?: %v, is-multi-stmt? %v, err: %v", rows == nil, isMultiStmt(&data.Data), err)
+		logger.WithContext(ctx).Infof("Debug: rows nil: is-multi-stmt? %v, err: %v", isMultiStmt(&data.Data), err)
 	}
 	if rows.ChunkDownloader == nil {
-		logger.WithContext(ctx).Infof("Debug: rows-chunk-downloader nil?: %v, is-multi-stmt? %v, err: %v", rows.ChunkDownloader == nil, isMultiStmt(&data.Data), err)
+		logger.WithContext(ctx).Infof("Debug: rows-chunk-downloader nil: is-multi-stmt? %v, err: %v", isMultiStmt(&data.Data), err)
 	}
 	rows.ChunkDownloader.start()
 	return rows, err
