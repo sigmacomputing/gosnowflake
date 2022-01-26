@@ -69,6 +69,7 @@ type snowflakeConn struct {
 	SQLState        string
 	telemetry       *snowflakeTelemetry
 	internal        InternalClient
+	execRespCache   *execRespCache
 }
 
 var (
@@ -223,6 +224,9 @@ func (sc *snowflakeConn) cleanup() {
 	// must flush log buffer while the process is running.
 	sc.rest = nil
 	sc.cfg = nil
+
+	releaseExecRespCache(sc.execRespCache)
+	sc.execRespCache = nil
 }
 
 func (sc *snowflakeConn) Close() (err error) {
