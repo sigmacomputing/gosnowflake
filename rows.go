@@ -165,7 +165,9 @@ func (rows *snowflakeRows) Next(dest []driver.Value) (err error) {
 			rows.ChunkDownloader.reset()
 		} else {
 			// SIG-17456: we want to bubble up errors within GoSnowflake so they can be caught by Multiplex.
-			panic(err)
+			if innerPanic, ok := err.(*wrappedPanic); ok {
+				panic(innerPanic)
+			}
 		}
 		return err
 	}

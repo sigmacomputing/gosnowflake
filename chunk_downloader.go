@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -63,6 +64,15 @@ type snowflakeChunkDownloader struct {
 	FuncDownload       func(context.Context, *snowflakeChunkDownloader, int)
 	FuncDownloadHelper func(context.Context, *snowflakeChunkDownloader, int) error
 	FuncGet            func(context.Context, *snowflakeChunkDownloader, string, map[string]string, time.Duration) (*http.Response, error)
+}
+
+type wrappedPanic struct {
+	stackTrace string
+	err        error
+}
+
+func (w *wrappedPanic) Error() string {
+	return fmt.Sprintf("Panic within GoSnowflake: %v\nStack-trace:\n %s", w.err, w.stackTrace)
 }
 
 func (scd *snowflakeChunkDownloader) totalUncompressedSize() (acc int64) {
@@ -287,7 +297,7 @@ func downloadChunk(ctx context.Context, scd *snowflakeChunkDownloader, idx int) 
 	defer scd.DoneDownloadCond.Broadcast()
 
 	defer func() {
-		var ret error
+		var ret *wrappedPanic
 		if err := recover(); err != nil {
 			logger.Infof("GoSnowflake chunk-downloader trapping error: %v", err)
 			stackTrace := make([]byte, 2048)
@@ -295,11 +305,14 @@ func downloadChunk(ctx context.Context, scd *snowflakeChunkDownloader, idx int) 
 			// TODO(agam): properly format the stack-trace-payload
 			switch errResolved := err.(type) {
 			case string:
-				ret = fmt.Errorf("Panic from GoSnowflake (str): %s: %s", errResolved, stackTrace)
+				ret = &wrappedPanic{
+					err:        errors.New(errResolved),
+					stackTrace: string(stackTrace),
+				}
 			case error:
-				ret = fmt.Errorf("Panic from GoSnowflake (err): %w: %s", errResolved, stackTrace)
+				ret = &wrappedPanic{err: errResolved, stackTrace: string(stackTrace)}
 			default:
-				ret = fmt.Errorf("Panic from GoSnowflake")
+				ret = &wrappedPanic{err: errors.New("Panic within GoSnowflake"), stackTrace: string(stackTrace)}
 			}
 			// Pass this through our error-channel
 			scd.ChunksError <- &chunkError{Index: idx, Error: ret}
