@@ -301,9 +301,9 @@ func downloadChunk(ctx context.Context, scd *snowflakeChunkDownloader, idx int) 
 			default:
 				ret = fmt.Errorf("Panic from GoSnowflake")
 			}
+			// Pass this through our error-channel
+			scd.ChunksError <- &chunkError{Index: idx, Error: ret}
 		}
-		// Pass this through our error-channel
-		scd.ChunksError <- &chunkError{Index: idx, Error: ret}
 	}()
 	if err := scd.FuncDownloadHelper(ctx, scd, idx); err != nil {
 		logger.Errorf(
