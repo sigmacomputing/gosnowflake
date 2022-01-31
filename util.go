@@ -10,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type contextKey string
@@ -51,7 +49,7 @@ func WithQueryIDChan(ctx context.Context, c chan<- string) context.Context {
 }
 
 // WithRequestID returns a new context with the specified snowflake request id
-func WithRequestID(ctx context.Context, requestID uuid.UUID) context.Context {
+func WithRequestID(ctx context.Context, requestID uuid) context.Context {
 	return context.WithValue(ctx, snowflakeRequestIDKey, requestID)
 }
 
@@ -94,12 +92,12 @@ func WithQueryTag(ctx context.Context, tag string) context.Context {
 }
 
 // Get the request ID from the context if specified, otherwise generate one
-func getOrGenerateRequestIDFromContext(ctx context.Context) uuid.UUID {
-	requestID, ok := ctx.Value(snowflakeRequestIDKey).(uuid.UUID)
-	if ok && requestID != uuid.Nil {
+func getOrGenerateRequestIDFromContext(ctx context.Context) uuid {
+	requestID, ok := ctx.Value(snowflakeRequestIDKey).(uuid)
+	if ok && requestID != nilUUID {
 		return requestID
 	}
-	return uuid.New()
+	return newUUID()
 }
 
 // integer min
