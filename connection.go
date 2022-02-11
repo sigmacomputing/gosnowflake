@@ -757,8 +757,7 @@ type ResultFetcher interface {
 	FetchResult(ctx context.Context, qid string) (driver.Rows, error)
 }
 
-func (sc *snowflakeConn) FetchMonitoringResult() (
-	*monitoringResult, error) {
+func (sc *snowflakeConn) FetchMonitoringResult() (*monitoringResult, error) {
 	if sc.rest == nil {
 		return nil, driver.ErrBadConn
 	}
