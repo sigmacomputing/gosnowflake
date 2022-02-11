@@ -758,7 +758,7 @@ type ResultFetcher interface {
 }
 
 // MonitoringResultFetcher is an interface which allows to fetch monitoringResult
-// snowflake connection and query-id.
+// with snowflake connection and query-id.
 type MonitoringResultFetcher interface {
 	FetchMonitoringResult() (*monitoringResult, error)
 }
