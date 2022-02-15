@@ -46,7 +46,7 @@ func stringFloatToDecimal(src string, scale int64) (decimal128.Num, bool) {
 
 type tcGoTypeToSnowflake struct {
 	in    interface{}
-	tmode snowflakeType
+	tmode SnowflakeDataType
 	out   snowflakeType
 }
 
@@ -128,7 +128,7 @@ func TestSnowflakeTypeToGo(t *testing.T) {
 
 func TestValueToString(t *testing.T) {
 	v := cmplx.Sqrt(-5 + 12i) // should never happen as Go sql package must have already validated.
-	_, err := valueToString(v, nullType)
+	_, err := valueToString(v, nil)
 	if err == nil {
 		t.Errorf("should raise error: %v", v)
 	}
@@ -138,7 +138,7 @@ func TestValueToString(t *testing.T) {
 	utcTime := time.Date(2019, 2, 6, 22, 17, 31, 123456789, time.UTC)
 	expectedUnixTime := "1549491451123456789" // time.Unix(1549491451, 123456789).Format(time.RFC3339) == "2019-02-06T14:17:31-08:00"
 
-	if s, err := valueToString(localTime, timestampLtzType); err != nil {
+	if s, err := valueToString(localTime, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
 	} else if s == nil {
 		t.Errorf("expected '%v', got %v", expectedUnixTime, s)
@@ -146,7 +146,7 @@ func TestValueToString(t *testing.T) {
 		t.Errorf("expected '%v', got '%v'", expectedUnixTime, *s)
 	}
 
-	if s, err := valueToString(utcTime, timestampLtzType); err != nil {
+	if s, err := valueToString(utcTime, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
 	} else if s == nil {
 		t.Errorf("expected '%v', got %v", expectedUnixTime, s)
