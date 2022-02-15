@@ -220,13 +220,13 @@ func getBindValues(bindings []driver.NamedValue) (map[string]execBindParameter, 
 			tsmode = convertTzTypeToSnowflakeType(tnt.TzType)
 			binding.Value = tnt.Time
 		}
-		t := goTypeToSnowflake(binding.Value, tsmode)
-		if t == changeType {
-			tsmode, err = dataTypeMode(binding.Value)
-			if err != nil {
-				return nil, err
-			}
-		} else {
+		switch binding.Value.(type) {
+		case snowflakeType:
+			// This binding is just specifying the type for subsequent bindings
+			tsmode = binding.Value.(snowflakeType)
+		default:
+			// This binding is an actual parameter for the query
+			t := goTypeToSnowflake(binding.Value, tsmode)
 			var val interface{}
 			if t == sliceType {
 				// retrieve array binding data

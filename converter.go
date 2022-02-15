@@ -58,31 +58,41 @@ func isInterfaceArrayBinding(t interface{}) bool {
 
 // goTypeToSnowflake translates Go data type to Snowflake data type.
 func goTypeToSnowflake(v driver.Value, tsmode snowflakeType) snowflakeType {
-	switch t := v.(type) {
-	case int64, sql.NullInt64:
-		return fixedType
-	case float64, sql.NullFloat64:
-		return realType
-	case bool, sql.NullBool:
-		return booleanType
-	case string, sql.NullString:
-		return textType
-	case []byte:
-		if tsmode == binaryType {
-			return binaryType // may be redundant but ensures BINARY type
+	if tsmode == nil {
+		switch t := v.(type) {
+		case int64, sql.NullInt64:
+			return fixedType
+		case float64, sql.NullFloat64:
+			return realType
+		case bool, sql.NullBool:
+			return booleanType
+		case string, sql.NullString:
+			return textType
+		case []byte:
+			if tsmode == binaryType {
+				return binaryType // may be redundant but ensures BINARY type
+			}
+			if t == nil {
+				return nullType // invalid byte array. won't take as BINARY
+			}
+			if len(t) != 1 {
+				return unSupportedType
+			}
+			if _, err := dataTypeMode(t); err != nil {
+				return unSupportedType
+			}
+			return changeType
+		case time.Time, sql.NullTime:
+			// Default timestamp type
+			return timestampNtzType
 		}
-		if t == nil {
-			return nullType // invalid byte array. won't take as BINARY
-		}
-		if len(t) != 1 {
+	} else {
+		// If we have an explicit type, use it
+		ty, err := clientTypeToInternal(tsmode)
+		if err != nil {
 			return unSupportedType
 		}
-		if _, err := dataTypeMode(t); err != nil {
-			return unSupportedType
-		}
-		return changeType
-	case time.Time, sql.NullTime:
-		return tsmode
+		return ty
 	}
 	if supportedArrayBind(&driver.NamedValue{Value: v}) {
 		return sliceType
