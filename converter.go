@@ -57,32 +57,36 @@ func isInterfaceArrayBinding(t interface{}) bool {
 }
 
 // goTypeToSnowflake translates Go data type to Snowflake data type.
-func goTypeToSnowflake(v driver.Value, tsmode snowflakeType) snowflakeType {
-	switch t := v.(type) {
-	case int64, sql.NullInt64:
-		return fixedType
-	case float64, sql.NullFloat64:
-		return realType
-	case bool, sql.NullBool:
-		return booleanType
-	case string, sql.NullString:
-		return textType
-	case []byte:
-		if tsmode == binaryType {
-			return binaryType // may be redundant but ensures BINARY type
+func goTypeToSnowflake(v driver.Value, dataType SnowflakeDataType) snowflakeType {
+	if dataType == nil {
+		switch t := v.(type) {
+		case SnowflakeDataType:
+			return changeType
+		case int64:
+			return fixedType
+		case float64:
+			return realType
+		case bool:
+			return booleanType
+		case string:
+			return textType
+		case []byte:
+			if t == nil {
+				return nullType // invalid byte array. won't take as BINARY
+			}
+			// If we don't have an explicit data type, binary blobs are unsupported
+			return unSupportedType
+		case time.Time:
+			// Default timestamp type
+			return timestampNtzType
 		}
-		if t == nil {
-			return nullType // invalid byte array. won't take as BINARY
-		}
-		if len(t) != 1 {
+	} else {
+		// If we have an explicit type, use it
+		ty, err := clientTypeToInternal(dataType)
+		if err != nil {
 			return unSupportedType
 		}
-		if _, err := dataTypeMode(t); err != nil {
-			return unSupportedType
-		}
-		return changeType
-	case time.Time, sql.NullTime:
-		return tsmode
+		return ty
 	}
 	if supportedArrayBind(&driver.NamedValue{Value: v}) {
 		return sliceType
@@ -115,7 +119,7 @@ func snowflakeTypeToGo(dbtype snowflakeType, scale int64) reflect.Type {
 
 // valueToString converts arbitrary golang type to a string. This is mainly used in binding data with placeholders
 // in queries.
-func valueToString(v driver.Value, tsmode snowflakeType) (*string, error) {
+func valueToString(v driver.Value, dataType SnowflakeDataType) (*string, error) {
 	logger.Debugf("TYPE: %v, %v", reflect.TypeOf(v), reflect.ValueOf(v))
 	if v == nil {
 		return nil, nil
@@ -139,7 +143,7 @@ func valueToString(v driver.Value, tsmode snowflakeType) (*string, error) {
 			return nil, nil
 		}
 		if bd, ok := v.([]byte); ok {
-			if tsmode == binaryType {
+			if dataType != nil && dataType.Equals(DataTypeBinary) {
 				s := hex.EncodeToString(bd)
 				return &s, nil
 			}
@@ -148,37 +152,29 @@ func valueToString(v driver.Value, tsmode snowflakeType) (*string, error) {
 		s := v1.String()
 		return &s, nil
 	case reflect.Struct:
-		switch typedVal := v.(type) {
-		case time.Time:
-			return timeTypeValueToString(typedVal, tsmode)
-		case sql.NullTime:
-			if !typedVal.Valid {
-				return nil, nil
+		if tm, ok := v.(time.Time); ok && dataType != nil {
+			switch {
+			case dataType.Equals(DataTypeDate):
+				_, offset := tm.Zone()
+				tm = tm.Add(time.Second * time.Duration(offset))
+				s := strconv.FormatInt(tm.Unix()*1000, 10)
+				return &s, nil
+			case dataType.Equals(DataTypeTime):
+				s := fmt.Sprintf("%d",
+					(tm.Hour()*3600+tm.Minute()*60+tm.Second())*1e9+tm.Nanosecond())
+				return &s, nil
+			case dataType.Equals(DataTypeTimestampNtz) || dataType.Equals(DataTypeTimestampLtz):
+				unixTime, _ := new(big.Int).SetString(fmt.Sprintf("%d", tm.Unix()), 10)
+				m, _ := new(big.Int).SetString(strconv.FormatInt(1e9, 10), 10)
+				unixTime.Mul(unixTime, m)
+				tmNanos, _ := new(big.Int).SetString(fmt.Sprintf("%d", tm.Nanosecond()), 10)
+				s := unixTime.Add(unixTime, tmNanos).String()
+				return &s, nil
+			case dataType.Equals(DataTypeTimestampTz):
+				_, offset := tm.Zone()
+				s := fmt.Sprintf("%v %v", tm.UnixNano(), offset/60+1440)
+				return &s, nil
 			}
-			return timeTypeValueToString(typedVal.Time, tsmode)
-		case sql.NullBool:
-			if !typedVal.Valid {
-				return nil, nil
-			}
-			s := strconv.FormatBool(typedVal.Bool)
-			return &s, nil
-		case sql.NullInt64:
-			if !typedVal.Valid {
-				return nil, nil
-			}
-			s := strconv.FormatInt(typedVal.Int64, 10)
-			return &s, nil
-		case sql.NullFloat64:
-			if !typedVal.Valid {
-				return nil, nil
-			}
-			s := strconv.FormatFloat(typedVal.Float64, 'g', -1, 32)
-			return &s, nil
-		case sql.NullString:
-			if !typedVal.Valid {
-				return nil, nil
-			}
-			return &typedVal.String, nil
 		}
 	}
 	return nil, fmt.Errorf("unsupported type: %v", v1.Kind())

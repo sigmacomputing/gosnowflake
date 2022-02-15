@@ -66,67 +66,47 @@ func stringFloatToInt(src string, scale int64) (int64, bool) {
 
 type tcGoTypeToSnowflake struct {
 	in    interface{}
-	tmode snowflakeType
+	tmode SnowflakeDataType
 	out   snowflakeType
 }
 
 func TestGoTypeToSnowflake(t *testing.T) {
 	testcases := []tcGoTypeToSnowflake{
-		{in: int64(123), tmode: nullType, out: fixedType},
-		{in: float64(234.56), tmode: nullType, out: realType},
-		{in: true, tmode: nullType, out: booleanType},
-		{in: "teststring", tmode: nullType, out: textType},
-		{in: Array([]int{1}), tmode: nullType, out: sliceType},
-		{in: Array(&[]int{1}), tmode: nullType, out: sliceType},
-		{in: Array([]int32{1}), tmode: nullType, out: sliceType},
-		{in: Array(&[]int32{1}), tmode: nullType, out: sliceType},
-		{in: Array([]int64{1}), tmode: nullType, out: sliceType},
-		{in: Array(&[]int64{1}), tmode: nullType, out: sliceType},
-		{in: Array([]float64{1.1}), tmode: nullType, out: sliceType},
-		{in: Array(&[]float64{1.1}), tmode: nullType, out: sliceType},
-		{in: Array([]float32{1.1}), tmode: nullType, out: sliceType},
-		{in: Array(&[]float32{1.1}), tmode: nullType, out: sliceType},
-		{in: Array([]bool{true}), tmode: nullType, out: sliceType},
-		{in: Array([]string{"test string"}), tmode: nullType, out: sliceType},
-		{in: Array([][]byte{}), tmode: nullType, out: sliceType},
-		{in: Array([]time.Time{time.Now()}, TimestampNTZType), tmode: timestampNtzType, out: sliceType},
-		{in: Array([]time.Time{time.Now()}, TimestampLTZType), tmode: timestampLtzType, out: sliceType},
-		{in: Array([]time.Time{time.Now()}, TimestampTZType), tmode: timestampTzType, out: sliceType},
-		{in: Array([]time.Time{time.Now()}, DateType), tmode: dateType, out: sliceType},
-		{in: Array([]time.Time{time.Now()}, TimeType), tmode: timeType, out: sliceType},
-		{in: DataTypeBinary, tmode: nullType, out: changeType},
-		{in: DataTypeTimestampLtz, tmode: nullType, out: changeType},
-		{in: DataTypeTimestampNtz, tmode: nullType, out: changeType},
-		{in: DataTypeTimestampTz, tmode: nullType, out: changeType},
-		{in: time.Now(), tmode: timestampNtzType, out: timestampNtzType},
-		{in: time.Now(), tmode: timestampTzType, out: timestampTzType},
-		{in: time.Now(), tmode: timestampLtzType, out: timestampLtzType},
-		{in: []byte{1, 2, 3}, tmode: binaryType, out: binaryType},
-		{in: Array([]interface{}{int64(123)}), tmode: nullType, out: sliceType},
-		{in: Array([]interface{}{float64(234.56)}), tmode: nullType, out: sliceType},
-		{in: Array([]interface{}{true}), tmode: nullType, out: sliceType},
-		{in: Array([]interface{}{"teststring"}), tmode: nullType, out: sliceType},
-		{in: Array([]interface{}{[]byte{1, 2, 3}}), tmode: nullType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}), tmode: timestampNtzType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}), tmode: timestampTzType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}), tmode: timestampLtzType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}), tmode: dateType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}), tmode: timeType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}, TimestampNTZType), tmode: timestampLtzType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}, TimestampLTZType), tmode: dateType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}, TimestampTZType), tmode: timeType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}, DateType), tmode: timestampNtzType, out: sliceType},
-		{in: Array([]interface{}{time.Now()}, TimeType), tmode: timestampTzType, out: sliceType},
+		{in: int64(123), tmode: nil, out: fixedType},
+		{in: float64(234.56), tmode: nil, out: realType},
+		{in: true, tmode: nil, out: booleanType},
+		{in: "teststring", tmode: nil, out: textType},
+		{in: Array([]int{1}), tmode: nil, out: sliceType},
+		{in: time.Now(), tmode: nil, out: timestampNtzType},
+		{in: time.Now(), tmode: DataTypeTimestampNtz, out: timestampNtzType},
+		{in: time.Now(), tmode: DataTypeTimestampTz, out: timestampTzType},
+		{in: time.Now(), tmode: DataTypeTimestampLtz, out: timestampLtzType},
+		{in: []byte{1, 2, 3}, tmode: DataTypeBinary, out: binaryType},
+		// Every explicit DataType should return changeType
+		{in: DataTypeFixed, tmode: nil, out: changeType},
+		{in: DataTypeReal, tmode: nil, out: changeType},
+		{in: DataTypeText, tmode: nil, out: changeType},
+		{in: DataTypeDate, tmode: nil, out: changeType},
+		{in: DataTypeVariant, tmode: nil, out: changeType},
+		{in: DataTypeTimestampLtz, tmode: nil, out: changeType},
+		{in: DataTypeTimestampNtz, tmode: nil, out: changeType},
+		{in: DataTypeTimestampTz, tmode: nil, out: changeType},
+		{in: DataTypeObject, tmode: nil, out: changeType},
+		{in: DataTypeArray, tmode: nil, out: changeType},
+		{in: DataTypeBinary, tmode: nil, out: changeType},
+		{in: DataTypeTime, tmode: nil, out: changeType},
+		{in: DataTypeBoolean, tmode: nil, out: changeType},
+		{in: DataTypeNull, tmode: nil, out: changeType},
 		// negative
-		{in: 123, tmode: nullType, out: unSupportedType},
-		{in: int8(12), tmode: nullType, out: unSupportedType},
-		{in: int32(456), tmode: nullType, out: unSupportedType},
-		{in: uint(456), tmode: nullType, out: unSupportedType},
-		{in: uint8(12), tmode: nullType, out: unSupportedType},
-		{in: uint64(456), tmode: nullType, out: unSupportedType},
-		{in: []byte{100}, tmode: nullType, out: unSupportedType},
-		{in: []int{1}, tmode: nullType, out: unSupportedType},
-		{in: nil, tmode: nullType, out: unSupportedType},
+		{in: 123, tmode: nil, out: unSupportedType},
+		{in: int8(12), tmode: nil, out: unSupportedType},
+		{in: int32(456), tmode: nil, out: unSupportedType},
+		{in: uint(456), tmode: nil, out: unSupportedType},
+		{in: uint8(12), tmode: nil, out: unSupportedType},
+		{in: uint64(456), tmode: nil, out: unSupportedType},
+		{in: []byte{100}, tmode: nil, out: unSupportedType},
+		{in: nil, tmode: nil, out: unSupportedType},
+		{in: []int{1}, tmode: nil, out: unSupportedType},
 	}
 	for _, test := range testcases {
 		t.Run(fmt.Sprintf("%v_%v_%v", test.in, test.out, test.tmode), func(t *testing.T) {
@@ -175,7 +155,7 @@ func TestSnowflakeTypeToGo(t *testing.T) {
 
 func TestValueToString(t *testing.T) {
 	v := cmplx.Sqrt(-5 + 12i) // should never happen as Go sql package must have already validated.
-	_, err := valueToString(v, nullType)
+	_, err := valueToString(v, nil)
 	if err == nil {
 		t.Errorf("should raise error: %v", v)
 	}
@@ -189,7 +169,7 @@ func TestValueToString(t *testing.T) {
 	expectedFloat64 := "1.1"
 	expectedString := "teststring"
 
-	if s, err := valueToString(localTime, timestampLtzType); err != nil {
+	if s, err := valueToString(localTime, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
 	} else if s == nil {
 		t.Errorf("expected '%v', got %v", expectedUnixTime, s)
@@ -197,7 +177,7 @@ func TestValueToString(t *testing.T) {
 		t.Errorf("expected '%v', got '%v'", expectedUnixTime, *s)
 	}
 
-	if s, err := valueToString(utcTime, timestampLtzType); err != nil {
+	if s, err := valueToString(utcTime, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
 	} else if s == nil {
 		t.Errorf("expected '%v', got %v", expectedUnixTime, s)
@@ -205,7 +185,7 @@ func TestValueToString(t *testing.T) {
 		t.Errorf("expected '%v', got '%v'", expectedUnixTime, *s)
 	}
 
-	if s, err := valueToString(sql.NullBool{Bool: true, Valid: true}, timestampLtzType); err != nil {
+	if s, err := valueToString(sql.NullBool{Bool: true, Valid: true}, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
 	} else if s == nil {
 		t.Errorf("expected '%v', got %v", expectedBool, s)
@@ -213,7 +193,7 @@ func TestValueToString(t *testing.T) {
 		t.Errorf("expected '%v', got '%v'", expectedBool, *s)
 	}
 
-	if s, err := valueToString(sql.NullInt64{Int64: 1, Valid: true}, timestampLtzType); err != nil {
+	if s, err := valueToString(sql.NullInt64{Int64: 1, Valid: true}, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
 	} else if s == nil {
 		t.Errorf("expected '%v', got %v", expectedInt64, s)
@@ -221,7 +201,7 @@ func TestValueToString(t *testing.T) {
 		t.Errorf("expected '%v', got '%v'", expectedInt64, *s)
 	}
 
-	if s, err := valueToString(sql.NullFloat64{Float64: 1.1, Valid: true}, timestampLtzType); err != nil {
+	if s, err := valueToString(sql.NullFloat64{Float64: 1.1, Valid: true}, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
 	} else if s == nil {
 		t.Errorf("expected '%v', got %v", expectedFloat64, s)
@@ -229,7 +209,7 @@ func TestValueToString(t *testing.T) {
 		t.Errorf("expected '%v', got '%v'", expectedFloat64, *s)
 	}
 
-	if s, err := valueToString(sql.NullString{String: "teststring", Valid: true}, timestampLtzType); err != nil {
+	if s, err := valueToString(sql.NullString{String: "teststring", Valid: true}, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
 	} else if s == nil {
 		t.Errorf("expected '%v', got %v", expectedString, s)

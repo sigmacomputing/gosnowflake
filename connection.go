@@ -515,8 +515,13 @@ func (sc *snowflakeConn) Ping(ctx context.Context) error {
 // CheckNamedValue determines which types are handled by this driver aside from
 // the instances captured by driver.Value
 func (sc *snowflakeConn) CheckNamedValue(nv *driver.NamedValue) error {
-	if supportedNullBind(nv) || supportedArrayBind(nv) {
+	if _, ok := nv.Value.(SnowflakeDataType); ok {
+		// Pass SnowflakeDataType args through without modification so that we can
+		// distinguish them from arguments of type []byte
 		return nil
+	}
+	if supported := supportedArrayBind(nv); !supported {
+		return driver.ErrSkip
 	}
 	return driver.ErrSkip
 }
