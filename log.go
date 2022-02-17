@@ -5,13 +5,14 @@ package gosnowflake
 import (
 	"context"
 	"fmt"
-	rlog "github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"path"
 	"runtime"
 	"strings"
 	"time"
+
+	rlog "github.com/sirupsen/logrus"
 )
 
 // SFSessionIDKey is context key of session id

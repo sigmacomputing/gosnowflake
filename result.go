@@ -2,7 +2,10 @@
 
 package gosnowflake
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 type queryStatus string
 
@@ -19,7 +22,8 @@ const (
 type SnowflakeResult interface {
 	GetQueryID() string
 	GetStatus() queryStatus
-	GetArrowBatches() ([]*ArrowBatch, error)
+	Monitoring(time.Duration) *QueryMonitoringData
+	QueryGraph(time.Duration) *QueryGraphData
 }
 
 type snowflakeResult struct {
@@ -29,6 +33,15 @@ type snowflakeResult struct {
 	status       queryStatus
 	err          error
 	errChannel   chan error
+	monitoring   *monitoringResult
+}
+
+type monitoringResult struct {
+	monitoringChan <-chan *QueryMonitoringData
+	queryGraphChan <-chan *QueryGraphData
+
+	monitoring *QueryMonitoringData
+	queryGraph *QueryGraphData
 }
 
 func (res *snowflakeResult) LastInsertId() (int64, error) {
@@ -90,4 +103,43 @@ func (*snowflakeResultNoRows) RowsAffected() (int64, error) {
 
 func (rnr *snowflakeResultNoRows) GetQueryID() string {
 	return rnr.queryID
+}
+
+func (res *snowflakeResult) Monitoring(wait time.Duration) *QueryMonitoringData {
+	return res.monitoring.Monitoring(wait)
+}
+func (res *snowflakeResult) QueryGraph(wait time.Duration) *QueryGraphData {
+	return res.monitoring.QueryGraph(wait)
+}
+
+func (m *monitoringResult) Monitoring(wait time.Duration) *QueryMonitoringData {
+	if m == nil {
+		return nil
+	} else if m.monitoring != nil {
+		return m.monitoring
+	}
+
+	select {
+	case v := <-m.monitoringChan:
+		m.monitoring = v
+		return v
+	case <-time.After(wait):
+		return nil
+	}
+}
+
+func (m *monitoringResult) QueryGraph(wait time.Duration) *QueryGraphData {
+	if m == nil {
+		return nil
+	} else if m.queryGraph != nil {
+		return m.queryGraph
+	}
+
+	select {
+	case v := <-m.queryGraphChan:
+		m.queryGraph = v
+		return v
+	case <-time.After(wait):
+		return nil
+	}
 }
