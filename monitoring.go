@@ -333,7 +333,7 @@ func (sc *snowflakeConn) getMonitoringResult(ctx context.Context, endpoint, qid 
 	defer sc.restMu.RUnlock()
 	headers := make(map[string]string)
 	param := make(url.Values)
-	param.Add(requestGUIDKey, uuid.New().String())
+	param.Add(requestGUIDKey, newUUID().String())
 	if tok, _, _ := sc.rest.TokenAccessor.GetTokens(); tok != "" {
 		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, tok)
 	}
