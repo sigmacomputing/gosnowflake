@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2022 Snowflake Computing Inc. All rights reserved.
+// Copyright (c) 2017-2021 Snowflake Computing Inc. All right reserved.
 
 package gosnowflake
 
@@ -43,14 +43,7 @@ type snowflakeRows struct {
 	status              queryStatus
 	err                 error
 	errChannel          chan error
-	location            *time.Location
-}
-
-func (rows *snowflakeRows) getLocation() *time.Location {
-	if rows.location == nil && rows.sc != nil && rows.sc.cfg != nil {
-		rows.location = getCurrentLocation(rows.sc.cfg.Params)
-	}
-	return rows.location
+	monitoring          *monitoringResult
 }
 
 type snowflakeValue interface{}
@@ -156,6 +149,14 @@ func (rows *snowflakeRows) GetQueryID() string {
 	return rows.queryID
 }
 
+func (rows *snowflakeRows) Monitoring(wait time.Duration) *QueryMonitoringData {
+	return rows.monitoring.Monitoring(wait)
+}
+
+func (rows *snowflakeRows) QueryGraph(wait time.Duration) *QueryGraphData {
+	return rows.monitoring.QueryGraph(wait)
+}
+
 func (rows *snowflakeRows) GetStatus() queryStatus {
 	return rows.status
 }
@@ -192,7 +193,11 @@ func (rows *snowflakeRows) Next(dest []driver.Value) (err error) {
 		for i, n := 0, len(row.RowSet); i < n; i++ {
 			// could move to chunk downloader so that each go routine
 			// can convert data
-			err = stringToValue(&dest[i], rows.ChunkDownloader.getRowType()[i], row.RowSet[i], rows.getLocation())
+			var loc *time.Location
+			if rows.sc != nil {
+				loc = getCurrentLocation(rows.sc.cfg.Params)
+			}
+			err = stringToValue(&dest[i], rows.ChunkDownloader.getRowType()[i], row.RowSet[i], loc)
 			if err != nil {
 				return err
 			}
