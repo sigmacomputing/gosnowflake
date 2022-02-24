@@ -527,7 +527,7 @@ func arrowToValue(
 			fraction := array.NewInt32Data(structData.Field(1).Data()).Int32Values()
 			for i := range *destcol {
 				if !srcValue.IsNull(i) {
-					(*destcol)[i] = time.Unix(epoch[i], int64(fraction[i])).In(localLocation)
+					(*destcol)[i] = time.Unix(epoch[i], int64(fraction[i]))
 				}
 			}
 		} else {
