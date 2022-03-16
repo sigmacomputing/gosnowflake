@@ -94,6 +94,7 @@ type Config struct {
 	ConnectionID string
 }
 
+// MonitoringFetcherConfig provides some knobs to control the behavior of the monitoring data fetcher
 type MonitoringFetcherConfig struct {
 	// QueryRuntimeThreshold specifies the threshold, over which we'll fetch the monitoring
 	// data for a successful snowflake query. We use a time-based threshold, since there is
