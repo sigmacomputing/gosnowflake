@@ -239,14 +239,16 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 		return err
 	}
 	if !resp.Success {
+		message := resp.Message
 		code, err := strconv.Atoi(resp.Code)
 		if err != nil {
-			return err
+			code = ErrQueryStatus
+			message = fmt.Sprintf("%s: (failed to parse original code: %s: %s)", message, resp.Code, err.Error())
 		}
 		return (&SnowflakeError{
 			Number:   code,
 			SQLState: resp.Data.SQLState,
-			Message:  resp.Message,
+			Message:  message,
 			QueryID:  resp.Data.QueryID,
 		}).exceptionTelemetry(sc)
 	}
