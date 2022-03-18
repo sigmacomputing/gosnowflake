@@ -272,6 +272,7 @@ const (
 	errMsgFailedToConvertToS3Client          = "failed to convert interface to s3 client"
 	errMsgNoResultIDs                        = "no result IDs returned with the multi-statement query"
 	errMsgQueryStatus                        = "server ErrorCode=%s, ErrorMessage=%s"
+	errMsgAsyncWithNoResults                 = "async with no results"
 )
 
 var (

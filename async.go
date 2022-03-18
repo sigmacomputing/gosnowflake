@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+func isAsyncModeNoFetch(ctx context.Context) bool {
+	if flag, ok := ctx.Value(asyncModeNoFetch).(bool); ok && flag {
+		return true
+	}
+
+	return false
+}
+
 func (sr *snowflakeRestful) processAsync(
 	ctx context.Context,
 	respd *execResponse,
@@ -70,7 +78,7 @@ func (sr *snowflakeRestful) getAsync(
 	// the get call pulling for result status is
 	var response *execResponse
 	var err error
-	for response == nil || !response.Success || parseCode(response.Code) == ErrQueryExecutionInProgress {
+	for response == nil || (!response.Success && parseCode(response.Code) == ErrQueryExecutionInProgress) {
 		response, err = sr.getAsyncOrStatus(ctx, URL, headers, timeout)
 
 		if err != nil {
@@ -115,19 +123,18 @@ func (sr *snowflakeRestful) getAsync(
 			rows.sc = sc
 			rows.queryID = response.Data.QueryID
 
-			// TODO(mihai): Find a better way to control this behavior. We usually use async to submit, but we only
-			//  want to download chunks via a separate results call (using a different context).
-			//  Launching the chunk downloader here seems like wasted work.
-			//if isMultiStmt(&response.Data) {
-			//	if err = sc.handleMultiQuery(ctx, response.Data, rows); err != nil {
-			//		rows.errChannel <- err
-			//		close(errChannel)
-			//		return err
-			//	}
-			//} else if !isAsyncMode(ctx) {
-			//	rows.addDownloader(populateChunkDownloader(ctx, sc, response.Data))
-			//}
-			//rows.ChunkDownloader.start()
+			if !isAsyncModeNoFetch(ctx) {
+				if isMultiStmt(&response.Data) {
+					if err = sc.handleMultiQuery(ctx, response.Data, rows); err != nil {
+						rows.errChannel <- err
+						close(errChannel)
+						return err
+					}
+				} else {
+					rows.addDownloader(populateChunkDownloader(ctx, sc, response.Data))
+				}
+				_ = rows.ChunkDownloader.start()
+			}
 			rows.errChannel <- nil // mark query status complete
 		}
 	} else {
