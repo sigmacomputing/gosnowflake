@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/arrow/go/v/arrow"
-	"github.com/apache/arrow/go/v/arrow/array"
-	"github.com/apache/arrow/go/v/arrow/memory"
+	"github.com/apache/arrow/go/arrow"
+	"github.com/apache/arrow/go/arrow/array"
+	"github.com/apache/arrow/go/arrow/memory"
 )
 
 type tcGoTypeToSnowflake struct {

@@ -7,9 +7,9 @@ import (
 	"encoding/base64"
 	"io"
 
-	"github.com/apache/arrow/go/v/arrow/array"
-	"github.com/apache/arrow/go/v/arrow/ipc"
-	"github.com/apache/arrow/go/v/arrow/memory"
+	"github.com/apache/arrow/go/arrow/array"
+	"github.com/apache/arrow/go/arrow/ipc"
+	"github.com/apache/arrow/go/arrow/memory"
 )
 
 type arrowResultChunk struct {
