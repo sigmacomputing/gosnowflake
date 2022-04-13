@@ -20,6 +20,19 @@ github.com/apache/arrow/go/arrow/memory
 github.com/apache/arrow/go/arrow/memory/internal/cgoalloc
 # github.com/apache/arrow/go/v7 v7.0.0
 ## explicit
+github.com/apache/arrow/go/v7/arrow
+github.com/apache/arrow/go/v7/arrow/array
+github.com/apache/arrow/go/v7/arrow/arrio
+github.com/apache/arrow/go/v7/arrow/bitutil
+github.com/apache/arrow/go/v7/arrow/decimal128
+github.com/apache/arrow/go/v7/arrow/endian
+github.com/apache/arrow/go/v7/arrow/float16
+github.com/apache/arrow/go/v7/arrow/internal/cpu
+github.com/apache/arrow/go/v7/arrow/internal/debug
+github.com/apache/arrow/go/v7/arrow/internal/flatbuf
+github.com/apache/arrow/go/v7/arrow/ipc
+github.com/apache/arrow/go/v7/arrow/memory
+github.com/apache/arrow/go/v7/arrow/memory/internal/cgoalloc
 # github.com/aws/aws-sdk-go-v2 v1.11.0
 ## explicit
 github.com/aws/aws-sdk-go-v2/aws
@@ -95,6 +108,16 @@ github.com/gabriel-vasile/mimetype
 github.com/gabriel-vasile/mimetype/internal/charset
 github.com/gabriel-vasile/mimetype/internal/json
 github.com/gabriel-vasile/mimetype/internal/magic
+# github.com/goccy/go-json v0.7.10
+github.com/goccy/go-json
+github.com/goccy/go-json/internal/decoder
+github.com/goccy/go-json/internal/encoder
+github.com/goccy/go-json/internal/encoder/vm
+github.com/goccy/go-json/internal/encoder/vm_color
+github.com/goccy/go-json/internal/encoder/vm_color_indent
+github.com/goccy/go-json/internal/encoder/vm_indent
+github.com/goccy/go-json/internal/errors
+github.com/goccy/go-json/internal/runtime
 # github.com/google/flatbuffers v2.0.0+incompatible
 github.com/google/flatbuffers/go
 # github.com/google/uuid v1.3.0
@@ -128,12 +151,17 @@ github.com/snowflakedb/gosnowflake
 # golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871
 ## explicit
 golang.org/x/crypto/ocsp
+# golang.org/x/mod v0.5.1-0.20210830214625-1b1db11ec8f4
+golang.org/x/mod/internal/lazyregexp
+golang.org/x/mod/module
+golang.org/x/mod/semver
 # golang.org/x/net v0.0.0-20211118161319-6a13c67c3ce4
 golang.org/x/net/html
 golang.org/x/net/html/atom
 golang.org/x/net/http/httpproxy
 golang.org/x/net/idna
 # golang.org/x/sys v0.0.0-20211117180635-dee7805ff2e1
+golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
@@ -143,6 +171,18 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
+# golang.org/x/tools v0.1.4
+golang.org/x/tools/cmd/goimports
+golang.org/x/tools/go/ast/astutil
+golang.org/x/tools/internal/event
+golang.org/x/tools/internal/event/core
+golang.org/x/tools/internal/event/keys
+golang.org/x/tools/internal/event/label
+golang.org/x/tools/internal/fastwalk
+golang.org/x/tools/internal/gocommand
+golang.org/x/tools/internal/gopathwalk
+golang.org/x/tools/internal/imports
+golang.org/x/tools/internal/typeparams
 # golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 golang.org/x/xerrors
 golang.org/x/xerrors/internal
