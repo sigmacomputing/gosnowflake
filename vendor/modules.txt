@@ -18,6 +18,8 @@ github.com/apache/arrow/go/arrow/internal/flatbuf
 github.com/apache/arrow/go/arrow/ipc
 github.com/apache/arrow/go/arrow/memory
 github.com/apache/arrow/go/arrow/memory/internal/cgoalloc
+# github.com/apache/arrow/go/v7 v7.0.0
+## explicit
 # github.com/aws/aws-sdk-go-v2 v1.11.0
 ## explicit
 github.com/aws/aws-sdk-go-v2/aws
