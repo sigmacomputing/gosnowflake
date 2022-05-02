@@ -16,6 +16,7 @@ type contextKey string
 const (
 	multiStatementCount   contextKey = "MULTI_STATEMENT_COUNT"
 	asyncMode             contextKey = "ASYNC_MODE_QUERY"
+	asyncModeNoFetch      contextKey = "ASYNC_MODE_NO_FETCH_QUERY"
 	queryIDChannel        contextKey = "QUERY_ID_CHANNEL"
 	snowflakeRequestIDKey contextKey = "SNOWFLAKE_REQUEST_ID"
 	fetchResultByID       contextKey = "SF_FETCH_RESULT_BY_ID"
@@ -23,6 +24,8 @@ const (
 	fileTransferOptions   contextKey = "FILE_TRANSFER_OPTIONS"
 	enableHigherPrecision contextKey = "ENABLE_HIGHER_PRECISION"
 	arrowBatches          contextKey = "ARROW_BATCHES"
+	// queryTag is a parameter that allows clients to append metadata to a query
+	queryTag contextKey = "QUERY_TAG"
 )
 
 const (
@@ -39,6 +42,11 @@ func WithMultiStatement(ctx context.Context, num int) (context.Context, error) {
 // WithAsyncMode returns a context that allows execution of query in async mode
 func WithAsyncMode(ctx context.Context) context.Context {
 	return context.WithValue(ctx, asyncMode, true)
+}
+
+// WithAsyncModeNoFetch returns a context that, when you execute a query in async mode, will not fetch results
+func WithAsyncModeNoFetch(ctx context.Context) context.Context {
+	return context.WithValue(ctx, asyncModeNoFetch, true)
 }
 
 // WithQueryIDChan returns a context that contains the channel to receive the query ID
@@ -87,6 +95,12 @@ func WithHigherPrecision(ctx context.Context) context.Context {
 // array.Record download workers upon querying
 func WithArrowBatches(ctx context.Context) context.Context {
 	return context.WithValue(ctx, arrowBatches, true)
+}
+
+// WithQueryTag returns a context that will set the given tag as the QUERY_TAG
+// parameter on any queries that are run
+func WithQueryTag(ctx context.Context, tag string) context.Context {
+	return context.WithValue(ctx, queryTag, tag)
 }
 
 // Get the request ID from the context if specified, otherwise generate one

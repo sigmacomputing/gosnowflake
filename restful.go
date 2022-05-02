@@ -41,10 +41,6 @@ const (
 	heartBeatPath            = "/session/heartbeat"
 )
 
-type (
-	funcGetType  func(context.Context, *snowflakeRestful, *url.URL, map[string]string, time.Duration) (*http.Response, error)
-	funcPostType func(context.Context, *snowflakeRestful, *url.URL, map[string]string, []byte, time.Duration, bool) (*http.Response, error)
-)
 
 type snowflakeRestful struct {
 	Host           string
@@ -236,7 +232,7 @@ func postRestfulQueryHelper(
 
 		// if asynchronous query in progress, kick off retrieval but return object
 		if respd.Code == queryInProgressAsyncCode && isAsyncMode(ctx) {
-			return sr.processAsync(ctx, &respd, headers, timeout, cfg)
+			return sr.processAsync(ctx, &respd, headers, timeout, cfg, requestID)
 		}
 		for isSessionRenewed || respd.Code == queryInProgressCode ||
 			respd.Code == queryInProgressAsyncCode {

@@ -1,4 +1,4 @@
-module github.com/snowflakedb/gosnowflake
+module github.com/sigmacomputing/gosnowflake
 
 go 1.17
 
@@ -14,6 +14,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.0
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/sirupsen/logrus v1.8.1
+	github.com/snowflakedb/gosnowflake v1.6.5
 	golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871
 )
 

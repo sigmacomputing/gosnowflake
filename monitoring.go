@@ -197,8 +197,12 @@ func (sc *snowflakeConn) checkQueryStatus(
 
 func (sc *snowflakeConn) getQueryResultResp(
 	ctx context.Context,
-	resultPath string) (
-	*execResponse, error) {
+	resultPath string,
+) (*execResponse, error) {
+	if respd, ok := sc.execRespCache.load(resultPath); ok {
+		return respd, nil
+	}
+
 	headers := getHeaders()
 	if serviceName, ok := sc.cfg.Params[serviceName]; ok {
 		headers[httpHeaderServiceName] = *serviceName
@@ -222,6 +226,8 @@ func (sc *snowflakeConn) getQueryResultResp(
 		logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
 		return nil, err
 	}
+
+	sc.execRespCache.store(resultPath, respd)
 	return respd, nil
 }
 
@@ -232,7 +238,7 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 	resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
 	resp, err := sc.getQueryResultResp(ctx, resultPath)
 	if err != nil {
-		logger.WithContext(ctx).Errorf("error: %v", err)
+		logger.WithContext(ctx).Errorf("Error while getting rows for running query: %v", err)
 		if resp != nil {
 			code, err := strconv.Atoi(resp.Code)
 			if err != nil {
@@ -246,6 +252,20 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 			}).exceptionTelemetry(sc)
 		}
 		return err
+	}
+	if !resp.Success {
+		message := resp.Message
+		code, err := strconv.Atoi(resp.Code)
+		if err != nil {
+			code = ErrQueryStatus
+			message = fmt.Sprintf("%s: (failed to parse original code: %s: %s)", message, resp.Code, err.Error())
+		}
+		return (&SnowflakeError{
+			Number:   code,
+			SQLState: resp.Data.SQLState,
+			Message:  message,
+			QueryID:  resp.Data.QueryID,
+		}).exceptionTelemetry(sc)
 	}
 	rows.addDownloader(populateChunkDownloader(ctx, sc, resp.Data))
 	return nil
@@ -264,4 +284,104 @@ func (sc *snowflakeConn) buildRowsForRunningQuery(
 	}
 	rows.ChunkDownloader.start()
 	return rows, nil
+}
+
+func mkMonitoringFetcher(sc *snowflakeConn, qid string, runtime time.Duration) *monitoringResult {
+	// Exit early if this was a "fast" query
+	if runtime < sc.cfg.MonitoringFetcher.QueryRuntimeThreshold {
+		return nil
+	}
+
+	queryGraphChan := make(chan *QueryGraphData, 1)
+	go queryGraph(sc, qid, queryGraphChan)
+
+	monitoringChan := make(chan *QueryMonitoringData, 1)
+	go monitoring(sc, qid, monitoringChan)
+
+	return &monitoringResult{
+		monitoringChan: monitoringChan,
+		queryGraphChan: queryGraphChan,
+	}
+}
+
+func monitoring(
+	sc *snowflakeConn,
+	qid string,
+	resp chan<- *QueryMonitoringData,
+) {
+	defer close(resp)
+
+	ctx, cancel := context.WithTimeout(context.Background(), sc.cfg.MonitoringFetcher.MaxDuration)
+	defer cancel()
+
+	var queryMonitoringData *QueryMonitoringData
+	for {
+		var m monitoringResponse
+		if err := sc.getMonitoringResult(ctx, "queries", qid, &m); err != nil {
+			break
+		}
+
+		if len(m.Data.Queries) == 1 {
+			queryMonitoringData = &m.Data.Queries[0]
+			if !strToQueryStatus(queryMonitoringData.Status).isRunning() {
+				break
+			}
+		}
+
+		time.Sleep(sc.cfg.MonitoringFetcher.RetrySleepDuration)
+	}
+
+	if queryMonitoringData != nil {
+		resp <- queryMonitoringData
+	}
+
+	return
+}
+
+func queryGraph(
+	sc *snowflakeConn,
+	qid string,
+	resp chan<- *QueryGraphData,
+) {
+	defer close(resp)
+
+	// Bound the GET request to 1 second in the absolute worst case.
+	ctx, cancel := context.WithTimeout(context.Background(), sc.cfg.MonitoringFetcher.MaxDuration)
+	defer cancel()
+
+	var qg queryGraphResponse
+	err := sc.getMonitoringResult(ctx, "query-plan-data", qid, &qg)
+	if err == nil && qg.Success {
+		resp <- &qg.Data
+	}
+}
+
+// getMonitoringResult fetches the result at /monitoring/queries/qid and
+// deserializes it into the provided res (which is given as a generic interface
+// to allow different callers to request different views on the raw response)
+func (sc *snowflakeConn) getMonitoringResult(ctx context.Context, endpoint, qid string, res interface{}) error {
+	sc.restMu.RLock()
+	defer sc.restMu.RUnlock()
+	headers := make(map[string]string)
+	param := make(url.Values)
+	param.Add(requestGUIDKey, newUUID().String())
+	if tok, _, _ := sc.rest.TokenAccessor.GetTokens(); tok != "" {
+		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, tok)
+	}
+	resultPath := fmt.Sprintf("/monitoring/%s/%s", endpoint, qid)
+	url := sc.rest.getFullURL(resultPath, &param)
+
+	resp, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
+	if err != nil {
+		logger.WithContext(ctx).Errorf("failed to get response for %s. err: %v", endpoint, err)
+		return err
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(res)
+	if err != nil {
+		logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
+		return err
+	}
+
+	return nil
 }
