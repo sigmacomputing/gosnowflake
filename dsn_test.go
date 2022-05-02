@@ -930,8 +930,9 @@ func TestDSN(t *testing.T) {
 				Password:      "p",
 				Account:       "a.b.c",
 				ClientTimeout: 300 * time.Second,
+				ConnectionID:  testConnectionID,
 			},
-			dsn: "u:p@a.b.c.snowflakecomputing.com:443?clientTimeout=300&ocspFailOpen=true&region=b.c&validateDefaultParameters=true",
+			dsn: "u:p@a.b.c.snowflakecomputing.com:443?clientTimeout=300&connectionId=abcd-0123-4567-1234&ocspFailOpen=true&region=b.c&validateDefaultParameters=true",
 		},
 	}
 	for _, test := range testcases {

@@ -472,7 +472,7 @@ func fillMissingConfigParameters(cfg *Config) error {
 	}
 
 	if cfg.ConnectionID == "" {
-		cfg.ConnectionID = newUUID().String()
+		cfg.ConnectionID = NewUUID().String()
 	}
 
 	if strings.HasSuffix(cfg.Host, defaultDomain) && len(cfg.Host) == len(defaultDomain) {

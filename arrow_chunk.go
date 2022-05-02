@@ -39,6 +39,7 @@ func (arc *arrowResultChunk) decodeArrowChunk(rowType []execResponseRowType, hig
 
 		for colIdx, col := range columns {
 			destcol := make([]snowflakeValue, numRows)
+			if err = arrowToValue(&destcol, rowType[colIdx], col, arc.loc, highPrec); err != nil {
 				return nil, err
 			}
 

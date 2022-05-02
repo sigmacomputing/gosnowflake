@@ -41,6 +41,10 @@ const (
 	heartBeatPath            = "/session/heartbeat"
 )
 
+type (
+	funcGetType  func(context.Context, *snowflakeRestful, *url.URL, map[string]string, time.Duration) (*http.Response, error)
+	funcPostType func(context.Context, *snowflakeRestful, *url.URL, map[string]string, []byte, time.Duration, bool) (*http.Response, error)
+)
 
 type snowflakeRestful struct {
 	Host           string
