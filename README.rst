@@ -128,7 +128,7 @@ Next, we want to create a merge commit that incorporates changes from the upstre
     git checkout -b reset-to-upstream upstream/master
 
     # Merge master into this branch, fixing any conflicts
-    git merge --strategy=ours master
+    git merge master
 
     # Switch back to master and merge the temporary branch into a new branch
     # off of master (will be a fast-forward merge).
