@@ -1,4 +1,4 @@
-module github.com/snowflakedb/gosnowflake
+module github.com/sigmacomputing/gosnowflake
 
 go 1.19
 
@@ -50,6 +50,7 @@ require (
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
+	github.com/snowflakedb/gosnowflake v1.6.20
 	github.com/stretchr/testify v1.8.1 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	golang.org/x/exp v0.0.0-20230206171751-46f607a40771 // indirect
