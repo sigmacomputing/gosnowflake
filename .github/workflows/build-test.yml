@@ -27,6 +27,7 @@ concurrency:
 
 jobs:
     build-test-linux:
+        environment: gosnowflake-ci-env
         runs-on: ubuntu-latest
         strategy:
             fail-fast: false
@@ -107,7 +108,3 @@ jobs:
                 PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
                 CLOUD_PROVIDER: ${{ matrix.cloud }}
               run: ci\\test.bat
-            - name: Upload coverage to Codecov
-              uses: codecov/codecov-action@v3
-              with:
-                token: ${{ secrets.CODE_COV_UPLOAD_TOKEN }}
