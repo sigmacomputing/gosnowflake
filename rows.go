@@ -46,7 +46,7 @@ type snowflakeRows struct {
 	errChannel          chan error
 	monitoring          *monitoringResult
 	location            *time.Location
-	asyncRequestID      uuid
+	asyncRequestID      UUID
 }
 
 func (rows *snowflakeRows) getLocation() *time.Location {
