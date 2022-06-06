@@ -143,12 +143,7 @@ github.com/gsterjov/go-libsecret
 # github.com/jmespath/go-jmespath v0.4.0
 ## explicit; go 1.14
 github.com/jmespath/go-jmespath
-<<<<<<< HEAD
 # github.com/klauspost/compress v1.15.11
-## explicit; go 1.17
-=======
-# github.com/klauspost/compress v1.13.6
->>>>>>> a6f698d ([Feature] Allow clients to specify any/null DataType explicitly)
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
@@ -157,13 +152,9 @@ github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
 # github.com/mattn/go-ieproxy v0.0.1
-## explicit; go 1.14
+## explicit; go 1.17
 github.com/mattn/go-ieproxy
-# github.com/mtibben/percent v0.2.1
-## explicit; go 1.14
-github.com/mtibben/percent
-# github.com/pierrec/lz4/v4 v4.1.16
-## explicit; go 1.14
+# github.com/pierrec/lz4/v4 v4.1.11
 github.com/pierrec/lz4/v4
 github.com/pierrec/lz4/v4/internal/lz4block
 github.com/pierrec/lz4/v4/internal/lz4errors
@@ -181,24 +172,18 @@ github.com/snowflakedb/gosnowflake
 # golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be
 ## explicit; go 1.17
 golang.org/x/crypto/ocsp
-# golang.org/x/net v0.5.0
-## explicit; go 1.17
+# golang.org/x/net v0.0.0-20211118161319-6a13c67c3ce4
 golang.org/x/net/html
 golang.org/x/net/html/atom
 golang.org/x/net/http/httpproxy
 golang.org/x/net/idna
-# golang.org/x/sys v0.4.0
-## explicit; go 1.17
+# golang.org/x/sys v0.0.0-20211117180635-dee7805ff2e1
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.4.0
-## explicit; go 1.17
-golang.org/x/term
-# golang.org/x/text v0.6.0
-## explicit; go 1.17
+# golang.org/x/text v0.3.7
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
