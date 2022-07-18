@@ -1039,6 +1039,12 @@ func recordToSchema(sc *arrow.Schema, rowType []execResponseRowType, loc *time.L
 				} else {
 					t = &arrow.Float64Type{}
 				}
+			case arrow.INT8, arrow.INT16, arrow.INT32:
+				if srcColumnMeta.Scale != 0 {
+					t = &arrow.Float64Type{}
+				} else {
+					t = &arrow.Int64Type{}
+				}
 			default:
 				if srcColumnMeta.Scale != 0 {
 					t = &arrow.Float64Type{}
@@ -1049,9 +1055,9 @@ func recordToSchema(sc *arrow.Schema, rowType []execResponseRowType, loc *time.L
 		case timeType:
 			t = &arrow.Time64Type{}
 		case timestampNtzType, timestampTzType:
-			t = &arrow.TimestampType{}
+			t = &arrow.TimestampType{Unit: arrow.Millisecond}
 		case timestampLtzType:
-			t = &arrow.TimestampType{TimeZone: loc.String()}
+			t = &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: loc.String()}
 		default:
 			converted = false
 		}
