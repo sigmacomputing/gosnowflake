@@ -764,6 +764,9 @@ func higherPrecisionEnabled(ctx context.Context) bool {
 	return ok && d
 }
 
+// Note(Qing): In the gosnowflake driver, either through arrowBatches or driver.Rows, the driver needs to
+// decode the fetched raw arrow records. Here we make the driver returns arrow records directly in format
+// that sigma desires.
 func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time.Location) (array.Record, error) {
 	s, err := recordToSchema(record.Schema(), rowType, loc)
 	if err != nil {
@@ -822,6 +825,17 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 						}
 					}
 					newCol = fb.NewArray()
+				} else {
+					// Cast to Int64 for sigma use, though not sure if this is happening at all
+					ib := array.NewInt64Builder(pool)
+					for i, val := range array.NewInt8Data(data).Int8Values() {
+						if !col.IsNull(i) {
+							ib.Append(int64(val))
+						} else {
+							ib.AppendNull()
+						}
+					}
+					newCol = ib.NewArray()
 				}
 			case arrow.INT16:
 				if srcColumnMeta.Scale != 0 {
@@ -836,6 +850,16 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 						}
 					}
 					newCol = fb.NewArray()
+				} else {
+					ib := array.NewInt64Builder(pool)
+					for i, val := range array.NewInt16Data(data).Int16Values() {
+						if !col.IsNull(i) {
+							ib.Append(int64(val))
+						} else {
+							ib.AppendNull()
+						}
+					}
+					newCol = ib.NewArray()
 				}
 			case arrow.INT32:
 				if srcColumnMeta.Scale != 0 {
@@ -850,6 +874,16 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 						}
 					}
 					newCol = fb.NewArray()
+				} else {
+					ib := array.NewInt64Builder(pool)
+					for i, val := range array.NewInt32Data(data).Int32Values() {
+						if !col.IsNull(i) {
+							ib.Append(int64(val))
+						} else {
+							ib.AppendNull()
+						}
+					}
+					newCol = ib.NewArray()
 				}
 			case arrow.INT64:
 				if srcColumnMeta.Scale != 0 {
@@ -864,6 +898,15 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 						}
 					}
 					newCol = fb.NewArray()
+				}
+			case arrow.FLOAT32:
+				fb := array.NewFloat64Builder(pool)
+				for i, val := range array.NewFloat32Data(data).Float32Values() {
+					if !col.IsNull(i) {
+						fb.Append(float64(val))
+					} else {
+						fb.AppendNull()
+					}
 				}
 			}
 		case timeType:
@@ -887,7 +930,7 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 			}
 			newCol = tb.NewArray()
 		case timestampNtzType:
-			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{})
+			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Millisecond})
 			if col.DataType().ID() == arrow.STRUCT {
 				structData := array.NewStructData(data)
 				epoch := array.NewInt64Data(structData.Field(0).Data()).Int64Values()
@@ -895,7 +938,7 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 				for i := 0; i < int(numRows); i++ {
 					if !col.IsNull(i) {
 						val := time.Unix(epoch[i], int64(fraction[i]))
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMilli()))
 					} else {
 						tb.AppendNull()
 					}
@@ -904,7 +947,7 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 				for i, t := range array.NewInt64Data(data).Int64Values() {
 					if !col.IsNull(i) {
 						val := time.Unix(0, t*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).UTC()
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMilli()))
 					} else {
 						tb.AppendNull()
 					}
@@ -912,7 +955,10 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 			}
 			newCol = tb.NewArray()
 		case timestampLtzType:
-			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: loc.String()})
+			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{
+				Unit:     arrow.Millisecond,
+				TimeZone: loc.String(),
+			})
 			if col.DataType().ID() == arrow.STRUCT {
 				structData := array.NewStructData(data)
 				epoch := array.NewInt64Data(structData.Field(0).Data()).Int64Values()
@@ -920,7 +966,7 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 				for i := 0; i < int(numRows); i++ {
 					if !col.IsNull(i) {
 						val := time.Unix(epoch[i], int64(fraction[i]))
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMilli()))
 					} else {
 						tb.AppendNull()
 					}
@@ -931,7 +977,7 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 						q := t / int64(math.Pow10(int(srcColumnMeta.Scale)))
 						r := t % int64(math.Pow10(int(srcColumnMeta.Scale)))
 						val := time.Unix(q, r)
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMilli()))
 					} else {
 						tb.AppendNull()
 					}
@@ -939,7 +985,7 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 			}
 			newCol = tb.NewArray()
 		case timestampTzType:
-			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{})
+			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Millisecond})
 			structData := array.NewStructData(data)
 			if structData.NumField() == 2 {
 				epoch := array.NewInt64Data(structData.Field(0).Data()).Int64Values()
@@ -949,7 +995,7 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 						loc := Location(int(timezone[i]) - 1440)
 						tt := time.Unix(epoch[i], 0)
 						val := tt.In(loc)
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMilli()))
 					} else {
 						tb.AppendNull()
 					}
@@ -963,7 +1009,7 @@ func arrowToRecord(record array.Record, rowType []execResponseRowType, loc *time
 						loc := Location(int(timezone[i]) - 1440)
 						tt := time.Unix(epoch[i], int64(fraction[i]))
 						val := tt.In(loc)
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMilli()))
 					} else {
 						tb.AppendNull()
 					}
