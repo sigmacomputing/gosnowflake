@@ -267,8 +267,10 @@ func (sc *snowflakeConn) buildRowsForRunningQuery(
 	if err := sc.rowsForRunningQuery(ctx, qid, rows); err != nil {
 		return nil, err
 	}
-	err := rows.ChunkDownloader.start()
-	return rows, err
+	if err := rows.ChunkDownloader.start(); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func mkMonitoringFetcher(sc *snowflakeConn, qid string, runtime time.Duration) *monitoringResult {
