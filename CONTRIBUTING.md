@@ -16,3 +16,4 @@ If it looks fine to you, comment with "LGTM" (Looks good to me).
 If changes are required, notice the reviewers with "PTAL" (Please take another look) after committing the fixes.
 
 Before merging the Pull Request, at least one Snowflake team member must have commented with "LGTM".
+
