@@ -123,7 +123,7 @@ func checkMetadata(actual arrow.Metadata, expected execResponseRowType) bool {
 			}
 		case "SCALE":
 			switch strings.ToUpper(expected.Type) {
-			case "FIXED", "TIMESTAMP_LTZ", "TIMESTAMP_NTZ":
+			case "FIXED", "TIME", "TIMESTAMP_LTZ", "TIMESTAMP_NTZ":
 				if i64, err := strconv.ParseInt(actual.Values()[idx], 10, 64); err != nil || i64 != expected.Scale {
 					return false
 				}
