@@ -97,7 +97,7 @@ func (arc *arrowResultChunk) passRawArrowBatch(scd *snowflakeChunkDownloader) (*
 			// NOTE(Qing): Sometimes we see the rowtype metadata specify nullable as false but then still
 			// reveive nullable arrow records. Given that, we do not check the nullability here. Also, no
 			// need to compare names.
-			if !compareMetadata(field.Metadata, scd.RowSet.RowType[idx]) {
+			if !checkMetadata(field.Metadata, scd.RowSet.RowType[idx]) {
 				logger.Error("Lack or mismatch of necessary metadata to decode fetched raw arrow records")
 				return nil, &SnowflakeError{
 					Message: "Lack or mismatch of necessary metadata to decode fetched raw arrow records",
@@ -110,10 +110,14 @@ func (arc *arrowResultChunk) passRawArrowBatch(scd *snowflakeChunkDownloader) (*
 	return &records, nil
 }
 
-func compareMetadata(actual arrow.Metadata, expected execResponseRowType) bool {
+func checkMetadata(actual arrow.Metadata, expected execResponseRowType) bool {
+	// LogicalType seems to be the only REALLY necessary metadata.
+	var hasLogicalType bool
+
 	for idx, key := range actual.Keys() {
 		switch strings.ToUpper(key) {
 		case "LOGICALTYPE":
+			hasLogicalType = true
 			if !strings.EqualFold(actual.Values()[idx], expected.Type) {
 				return false
 			}
@@ -128,7 +132,7 @@ func compareMetadata(actual arrow.Metadata, expected execResponseRowType) bool {
 		default:
 		}
 	}
-	return true
+	return hasLogicalType
 }
 
 // Build arrow chunk based on RowSet of base64
