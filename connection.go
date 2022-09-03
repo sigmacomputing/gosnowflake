@@ -277,10 +277,10 @@ func (sc *snowflakeConn) ExecContext(
 		rows := &snowflakeResult{
 			affectedRows: updatedRows,
 			insertID:     -1,
-			queryID:      sc.QueryID,
+			queryID:      data.Data.QueryID,
 		} // last insert id is not supported by Snowflake
 
-		rows.monitoring = mkMonitoringFetcher(sc, sc.QueryID, time.Since(qStart))
+		rows.monitoring = mkMonitoringFetcher(sc, data.Data.QueryID, time.Since(qStart))
 
 		return rows, nil
 	} else if isMultiStmt(&data.Data) {
@@ -288,7 +288,7 @@ func (sc *snowflakeConn) ExecContext(
 		if err != nil {
 			return nil, err
 		}
-		rows.monitoring = mkMonitoringFetcher(sc, sc.QueryID, time.Since(qStart))
+		rows.monitoring = mkMonitoringFetcher(sc, data.Data.QueryID, time.Since(qStart))
 
 		return rows, nil
 	}
@@ -358,8 +358,8 @@ func (sc *snowflakeConn) queryContextInternal(
 
 	rows := new(snowflakeRows)
 	rows.sc = sc
-	rows.queryID = sc.QueryID
-	rows.monitoring = mkMonitoringFetcher(sc, sc.QueryID, time.Since(qStart))
+	rows.queryID = data.Data.QueryID
+	rows.monitoring = mkMonitoringFetcher(sc, data.Data.QueryID, time.Since(qStart))
 
 	if isSubmitSync(ctx) && data.Code == queryInProgressCode {
 		rows.status = QueryStatusInProgress
