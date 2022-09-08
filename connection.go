@@ -359,7 +359,17 @@ func (sc *snowflakeConn) queryContextInternal(
 	rows := new(snowflakeRows)
 	rows.sc = sc
 	rows.queryID = sc.QueryID
+	_ = qStart
 	rows.monitoring = mkMonitoringFetcher(sc, sc.QueryID, time.Since(qStart))
+
+	// TODO handle errors? network errors, query failures
+	if isSubmitSync(ctx) && data.Code == queryInProgressCode {
+		rows.status = QueryStatusInProgress
+		return rows, nil
+	}
+	rows.status = QueryStatusComplete
+
+	//rows.status = QueryStatusInProgress
 
 	if isMultiStmt(&data.Data) {
 		// handleMultiQuery is responsible to fill rows with childResults
@@ -380,6 +390,8 @@ func (sc *snowflakeConn) queryContextInternal(
 		rows.addDownloader(populateChunkDownloader(ctx, sc, data.Data))
 	}
 
+	// TODO for ArrowBatches (enabled when submitSync enabled), this should not
+	// actually start downloading anything beyond the first chunk
 	if startErr := rows.ChunkDownloader.start(); startErr != nil {
 		return nil, startErr
 	}
@@ -579,4 +591,24 @@ func (sc *snowflakeConn) FetchMonitoringResult(queryID string, runtime time.Dura
 	// set the fake runtime just to bypass fast query
 	monitoringResult := mkMonitoringFetcher(sc, queryID, runtime)
 	return monitoringResult, nil
+}
+
+// Fetches query results only if query completes within 45sec
+// Must wait for status within 300sec, otherwise query will be aborted
+type QuerySubmitter interface {
+	SubmitQuerySync(ctx context.Context, query string) (SnowflakeResult, error)
+}
+
+func (sc *snowflakeConn) SubmitQuerySync(ctx context.Context, query string) (SnowflakeResult, error) {
+	rows, err := sc.queryContextInternal(
+		// TODO add WithSubmitSync(ctx)
+		context.WithValue(WithArrowBatches(ctx), submitSync, true),
+		query,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return rows.(*snowflakeRows), nil
 }

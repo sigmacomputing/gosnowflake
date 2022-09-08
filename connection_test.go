@@ -3,8 +3,11 @@
 package gosnowflake
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"database/sql/driver"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +19,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/apache/arrow/go/arrow"
+	"github.com/apache/arrow/go/arrow/array"
+	"github.com/apache/arrow/go/arrow/ipc"
+	"github.com/apache/arrow/go/arrow/memory"
 )
 
 const (
@@ -470,5 +478,111 @@ func TestExecWithServerSideError(t *testing.T) {
 	}
 	if !strings.Contains(sfe.Message, "an unknown server side error occurred") {
 		t.Errorf("incorrect message. expected: %v, got: %v", ErrUnknownError.Message, sfe.Message)
+	}
+}
+
+func TestSubmitQuerySync(t *testing.T) {
+	postMock := func(_ context.Context, _ *snowflakeRestful, _ *url.URL, _ map[string]string,
+		_ []byte, _ time.Duration, _ bool) (*http.Response, error) {
+		dd := &execResponseData{}
+		er := &execResponse{
+			Data:    *dd,
+			Message: "",
+			Code:    queryInProgressCode,
+			Success: true,
+		}
+		ba, err := json.Marshal(er)
+		if err != nil {
+			panic(err)
+		}
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       &fakeResponseBody{body: ba},
+		}, nil
+	}
+
+	sr := &snowflakeRestful{
+		FuncPost:            postMock,
+		FuncPostQuery:       postRestfulQuery,
+		FuncPostQueryHelper: postRestfulQueryHelper,
+		TokenAccessor:       getSimpleTokenAccessor(),
+	}
+	sc := &snowflakeConn{
+		cfg: &Config{Params: map[string]*string{},
+			// TODO remove this
+			MonitoringFetcher: MonitoringFetcherConfig{QueryRuntimeThreshold: -1}},
+		rest:      sr,
+		telemetry: testTelemetry,
+	}
+
+	res, err := sc.SubmitQuerySync(context.TODO(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.GetStatus() != QueryStatusInProgress {
+		t.Errorf("Expected query in progress, got %s", res.GetStatus())
+	}
+}
+
+func TestSubmitQuerySyncQueryComplete(t *testing.T) {
+	postMock := func(_ context.Context, _ *snowflakeRestful, _ *url.URL, _ map[string]string,
+		_ []byte, _ time.Duration, _ bool,
+	) (*http.Response, error) {
+		schema := arrow.NewSchema([]arrow.Field{
+			{Name: "field", Type: &arrow.Int64Type{}},
+		}, nil)
+		builder := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+
+		// TODO add rows
+		rec := builder.NewRecord()
+
+		var buf bytes.Buffer
+		bufWriter := bufio.NewWriter(&buf)
+		w := ipc.NewWriter(bufWriter)
+		w.Write(rec)
+		chunkB64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+		rec.Release()
+
+		dd := &execResponseData{RowSetBase64: chunkB64}
+		er := &execResponse{
+			Data:    *dd,
+			Message: "",
+			Code:    "",
+			Success: true,
+		}
+		ba, err := json.Marshal(er)
+		if err != nil {
+			panic(err)
+		}
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       &fakeResponseBody{body: ba},
+		}, nil
+	}
+
+	sr := &snowflakeRestful{
+		FuncPost:            postMock,
+		FuncPostQuery:       postRestfulQuery,
+		FuncPostQueryHelper: postRestfulQueryHelper,
+		TokenAccessor:       getSimpleTokenAccessor(),
+	}
+	sc := &snowflakeConn{
+		cfg: &Config{Params: map[string]*string{},
+			// TODO remove this
+			MonitoringFetcher: MonitoringFetcherConfig{QueryRuntimeThreshold: 0}},
+		rest:      sr,
+		telemetry: testTelemetry,
+	}
+
+	res, err := sc.SubmitQuerySync(context.TODO(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.GetStatus() != QueryStatusComplete {
+		t.Errorf("Expected query complete, got %s", res.GetStatus())
 	}
 }

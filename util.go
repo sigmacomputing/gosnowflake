@@ -25,6 +25,7 @@ const (
 	enableHigherPrecision contextKey = "ENABLE_HIGHER_PRECISION"
 	arrowBatches          contextKey = "ARROW_BATCHES"
 	queryTag              contextKey = "QUERY_TAG"
+	submitSync            contextKey = "SUBMIT_SYNC"
 )
 
 const (
