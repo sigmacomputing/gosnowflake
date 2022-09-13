@@ -547,7 +547,7 @@ func (sc *snowflakeConn) FetchResult(ctx context.Context, qid string) (driver.Ro
 // given the snowflake query-id. This functionality is not used by the
 // go sql library but is exported to clients who can make use of this
 // capability explicitly.
-func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string) (error) {
+func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string) error {
     return sc.blockOnQueryCompletion(ctx, qid)
 }
 
@@ -560,7 +560,7 @@ func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string)
 // function.
 type ResultFetcher interface {
 	FetchResult(ctx context.Context, qid string) (driver.Rows, error)
-	WaitForQueryCompletion(ctx context.Context, qid string) (error)
+	WaitForQueryCompletion(ctx context.Context, qid string) error
 }
 
 // MonitoringResultFetcher is an interface which allows to fetch monitoringResult
