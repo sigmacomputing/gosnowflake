@@ -316,7 +316,7 @@ func (sc *snowflakeConn) buildRowsForRunningQuery(
 func (sc *snowflakeConn) blockOnQueryCompletion(
     ctx context.Context,
     qid string,
-) (error) {
+) error {
     if err := sc.blockOnRunningQuery(ctx, qid); err != nil {
         return err
     }
