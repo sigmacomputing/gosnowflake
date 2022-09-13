@@ -554,6 +554,14 @@ type ResultFetcher interface {
 	FetchResult(ctx context.Context, qid string) (driver.Rows, error)
 }
 
+// WaitForQueryCompletion waits for the result of a previously issued query,
+// given the snowflake query-id. This functionality is not used by the
+// go sql library but is exported to clients who can make use of this
+// capability explicitly.
+func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string) (error) {
+    return sc.blockOnQueryCompletion(ctx, qid)
+}
+
 // MonitoringResultFetcher is an interface which allows to fetch monitoringResult
 // with snowflake connection and query-id.
 type MonitoringResultFetcher interface {
