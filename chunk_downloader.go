@@ -749,16 +749,6 @@ func (rb *ArrowBatch) Fetch(ctx context.Context) (*[]array.Record, error) {
 	return rb.rec, nil
 }
 
-// TODO move this somewhere sensible
-func isSubmitSync(ctx context.Context) bool {
-	val := ctx.Value(submitSync)
-	if val == nil {
-		return false
-	}
-	a, ok := val.(bool)
-	return a && ok
-}
-
 func usesArrowBatches(ctx context.Context) bool {
 	val := ctx.Value(arrowBatches)
 	if val == nil {

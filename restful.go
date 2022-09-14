@@ -234,9 +234,10 @@ func postRestfulQueryHelper(
 
 		isSessionRenewed := false
 
+		// If this is a SubmitSync operation and the query is still running, return
+		// immediately. The caller will be responsible for using the query ID to
+		// fetch query results.
 		if respd.Code == queryInProgressCode && isSubmitSync(ctx) {
-			// TODO The client will need to make a separate call to wait for query completion
-			// given the Snowflake query ID.
 			return &respd, nil
 		}
 		// if asynchronous query in progress, kick off retrieval but return object
