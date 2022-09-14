@@ -587,17 +587,19 @@ func (sc *snowflakeConn) FetchMonitoringResult(queryID string, runtime time.Dura
 	return monitoringResult, nil
 }
 
-// Fetches query results only if query completes within 45sec
-// Must wait for status within 300sec, otherwise query will be aborted
+// QuerySubmitter is an interface that allows executing a query synchronously
+// while only fetching the result if the query completes within 45 seconds.
 type QuerySubmitter interface {
 	SubmitQuerySync(ctx context.Context, query string) (SnowflakeResult, error)
 }
 
 // SubmitQuerySync submits the given query for execution, and waits synchronously
-// for up to 45 seconds. If the query complete within that duration, the SnowflakeResult
-// is marked as complete, and the results can be fetched via the GetArrowBatches()
-// method. Otherwise, the caller can use the provided query ID to fetch the query's
-// results asynchronously.
+// for up to 45 seconds.
+// If the query complete within that duration, the SnowflakeResult is marked as complete,
+// and the results can be fetched via the GetArrowBatches() method.
+// Otherwise, the caller can use the provided query ID to fetch the query's results
+// asynchronously. The caller must fetch the results of a query that is still running
+// within 300 seconds, otherwise the query will be aborted.
 func (sc *snowflakeConn) SubmitQuerySync(
 	ctx context.Context,
 	query string,
