@@ -249,6 +249,7 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	for response == nil || isQueryInProgress(response) {
 		deadline, ok := ctx.Deadline()
 		var resp *http.Response
+		// FuncGet will always return either when the query finishes or 45 seconds have passed
 		if !ok {
 			resp, err = sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
 		} else {
