@@ -7,7 +7,6 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
 	"time"
@@ -244,37 +243,28 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	}
 	url := sc.rest.getFullURL(resultPath, &param)
 
-	// pull on FuncGet until we have a result at the result location (queryID)
+
+	deadline, ok := ctx.Deadline()
+	var timeout time.Duration
+	if !ok {
+		timeout = sc.rest.RequestTimeout
+	} else {
+		// if we have a context deadline set we want to override the default
+		timeout = deadline.Sub(time.Now())
+	}
+
+	// internally, pulls on FuncGet until we have a result at the result location (queryID)
 	var response *execResponse
 	var err error
 	for response == nil || isQueryInProgress(response) {
-		deadline, ok := ctx.Deadline()
-		var resp *http.Response
-		// FuncGet will always return either when the query finishes or 45 seconds have passed
-		if !ok {
-			resp, err = sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
-		} else {
-			// if we have a context deadline set we want to override the default
-			resp, err = sc.rest.FuncGet(ctx, sc.rest, url, headers, deadline.Sub(time.Now()))
-		}
-		
-		if err != nil {
-			return nil, err
-		}
-		if resp.Body != nil {
-			defer func() { _ = resp.Body.Close() }()
-		}
+		response, err = sc.rest.getAsyncOrStatus(ctx, url, headers, timeout)
 
-		if err = json.NewDecoder(resp.Body).Decode(&response); err != nil {
-			return nil, err
-		}
-
-		// if the context is canceled, we have to cancel it manually now 
+		// if the context is canceled, we have to cancel it manually now
 		if err != nil {
 			logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
 			if err == context.Canceled || err == context.DeadlineExceeded {
 				// use the default top level 1 sec timeout for cancellation as throughout the driver
-				if err = cancelQuery(context.TODO(), sc.rest, requestID, time.Second); err != nil {
+				if err := cancelQuery(context.TODO(), sc.rest, requestID, time.Second); err != nil {
 					logger.WithContext(ctx).Errorf("failed to cancel async query, err: %v", err)
 				}
 			}
