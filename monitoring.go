@@ -265,7 +265,6 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 			defer func() { _ = resp.Body.Close() }()
 		}
 
-		response := &execResponse{}
 		if err = json.NewDecoder(resp.Body).Decode(&response); err != nil {
 			return nil, err
 		}
