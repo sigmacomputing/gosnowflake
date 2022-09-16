@@ -182,6 +182,7 @@ func (sc *snowflakeConn) checkQueryStatus(
 	return &queryRet, nil
 }
 
+// Waits 45 seconds for a query response; return early if query finishes 
 func (sc *snowflakeConn) getQueryResultResp(
 	ctx context.Context,
 	resultPath string,
@@ -216,6 +217,72 @@ func (sc *snowflakeConn) getQueryResultResp(
 
 	sc.execRespCache.store(resultPath, respd)
 	return respd, nil
+}
+
+// Waits for the query to complete, then returns the response
+func (sc *snowflakeConn) waitForCompletedQueryResultResp(
+	ctx context.Context,
+	resultPath string,
+) (*execResponse, error) {
+	// if we already have the response; return that
+	if cachedResponse, ok := sc.execRespCache.load(resultPath); ok {
+		return cachedResponse, nil
+	}
+	requestID := getOrGenerateRequestIDFromContext(ctx)
+	headers := getHeaders()
+	if serviceName, ok := sc.cfg.Params[serviceName]; ok {
+		headers[httpHeaderServiceName] = *serviceName
+	}
+	param := make(url.Values)
+	param.Add(requestIDKey, requestID.String())
+	param.Add("clientStartTime", strconv.FormatInt(time.Now().Unix(), 10))
+	param.Add(requestGUIDKey, NewUUID().String())
+	token, _, _ := sc.rest.TokenAccessor.GetTokens()
+	if token != "" {
+		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, token)
+	}
+	url := sc.rest.getFullURL(resultPath, &param)
+
+	// pull on FuncGet until we have a result at the result location (queryID)
+	var response *execResponse
+	var err error
+	for response == nil || isQueryInProgress(response) {
+		deadline, ok := ctx.Deadline()
+		var resp *http.Response
+		if !ok {
+			resp, err = sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
+		} else {
+			// if we have a context deadline set we want to override the default
+			resp, err = sc.rest.FuncGet(ctx, sc.rest, url, headers, deadline.Sub(time.Now()))
+		}
+		
+		if err != nil {
+			return nil, err
+		}
+		if resp.Body != nil {
+			defer func() { _ = resp.Body.Close() }()
+		}
+
+		response := &execResponse{}
+		if err = json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return nil, err
+		}
+
+		// if the context is canceled, we have to cancel it manually now 
+		if err != nil {
+			logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
+			if err == context.Canceled || err == context.DeadlineExceeded {
+				// use the default top level 1 sec timeout for cancellation as throughout the driver
+				if err = cancelQuery(context.TODO(), sc.rest, requestID, time.Second); err != nil {
+					logger.WithContext(ctx).Errorf("failed to cancel async query, err: %v", err)
+				}
+			}
+			return nil, err
+		}
+	}
+
+	sc.execRespCache.store(resultPath, response)
+	return response, nil
 }
 
 // Fetch query result for a query id from /queries/<qid>/result endpoint.
@@ -262,7 +329,7 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 func (sc *snowflakeConn) blockOnRunningQuery(
     ctx context.Context, qid string) error {
     resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
-    resp, err := sc.getQueryResultResp(ctx, resultPath)
+    resp, err := sc.waitForCompletedQueryResultResp(ctx, resultPath)
     if err != nil {
         logger.WithContext(ctx).Errorf("error: %v", err)
         if resp != nil {
