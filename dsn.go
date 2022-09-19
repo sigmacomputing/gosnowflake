@@ -391,7 +391,7 @@ func ParseDSN(dsn string) (cfg *Config, err error) {
 	return cfg, nil
 }
 
-// Fills missing parameters in the given config.
+// FillMissingConfigParameters fills missing parameters in the given config.
 func FillMissingConfigParameters(cfg *Config) error {
 	return fillMissingConfigParameters(cfg)
 }
