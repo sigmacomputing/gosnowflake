@@ -14,6 +14,7 @@ require (
 	github.com/aws/smithy-go v1.13.5
 	github.com/form3tech-oss/jwt-go v3.2.5+incompatible
 	github.com/gabriel-vasile/mimetype v1.4.2
+	github.com/google/uuid v1.3.1
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/sirupsen/logrus v1.9.0
 	github.com/snowflakedb/gosnowflake v1.8.0
