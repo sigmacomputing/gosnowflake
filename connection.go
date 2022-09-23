@@ -58,8 +58,8 @@ type snowflakeConn struct {
 	rest            *snowflakeRestful
 	restMu          sync.RWMutex // guard shutdown race
 	SequenceCounter uint64
-	QueryID         string
-	SQLState        string
+	//QueryID         string
+	//SQLState        string
 	telemetry       *snowflakeTelemetry
 	internal        InternalClient
 	execRespCache   *execRespCache
@@ -146,13 +146,17 @@ func (sc *snowflakeConn) exec(
 	}
 
 	logger.WithContext(ctx).Info("Exec/Query SUCCESS")
-	sc.cfg.Database = data.Data.FinalDatabaseName
-	sc.cfg.Schema = data.Data.FinalSchemaName
-	sc.cfg.Role = data.Data.FinalRoleName
-	sc.cfg.Warehouse = data.Data.FinalWarehouseName
-	sc.QueryID = data.Data.QueryID
-	sc.SQLState = data.Data.SQLState
-	sc.populateSessionParameters(data.Data.Parameters)
+
+    // Now if the counter matches then update the data
+    // In theory the final names will always be the same for the life of the connection?
+	//sc.cfg.Database = data.Data.FinalDatabaseName
+	//sc.cfg.Schema = data.Data.FinalSchemaName
+	//sc.cfg.Role = data.Data.FinalRoleName
+	//sc.cfg.Warehouse = data.Data.FinalWarehouseName
+	//sc.populateSessionParameters(data.Data.Parameters)
+
+	//sc.QueryID = data.Data.QueryID
+	//sc.SQLState = data.Data.SQLState
 	return data, err
 }
 

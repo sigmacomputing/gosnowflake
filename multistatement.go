@@ -85,7 +85,7 @@ func (sc *snowflakeConn) handleMultiExec(
 	return &snowflakeResult{
 		affectedRows: updatedRows,
 		insertID:     -1,
-		queryID:      sc.QueryID,
+		queryID:      data.QueryID,
 	}, nil
 }
 

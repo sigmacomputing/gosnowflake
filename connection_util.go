@@ -150,7 +150,7 @@ func (sc *snowflakeConn) populateSessionParameters(parameters []nameValueParamet
 			}
 		}
 		logger.Debugf("parameter. name: %v, value: %v", param.Name, v)
-		sc.cfg.Params[strings.ToLower(param.Name)] = &v
+		//sc.cfg.Params[strings.ToLower(param.Name)] = &v
 	}
 }
 
