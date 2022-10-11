@@ -223,7 +223,7 @@ func (sc *snowflakeConn) getQueryResultResp(
 func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	ctx context.Context,
 	resultPath string,
-) (*execResponse, error) {
+) (*execResponse, *SnowflakeError) {
 	// if we already have the response; return that
 	if cachedResponse, ok := sc.execRespCache.load(resultPath); ok {
 		return cachedResponse, nil
@@ -242,7 +242,6 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, token)
 	}
 	url := sc.rest.getFullURL(resultPath, &param)
-
 
 	deadline, ok := ctx.Deadline()
 	var timeout time.Duration
@@ -268,7 +267,15 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 					logger.WithContext(ctx).Errorf("failed to cancel async query, err: %v", err)
 				}
 			}
-			return nil, err
+
+			sfError := &SnowflakeError{
+				Number:   parseCode(response.Code),
+				SQLState: response.Data.SQLState,
+				Message:  response.Message,
+				QueryID:  response.Data.QueryID,
+			}
+
+			return nil, sfError
 		}
 	}
 
