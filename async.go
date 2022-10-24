@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"time"
 )
@@ -195,8 +196,8 @@ func (sr *snowflakeRestful) getAsyncOrStatus(
 	return response, nil
 }
 
-// if there is no response, from func get, check the timeout and the contextDeadline 
-// and panic to look into the stack trace 
+// if there is no response, from func get, check the timeout and the contextDeadline
+// and panic to look into the stack trace
 func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
 	ctx context.Context,
 	url *url.URL,
@@ -210,11 +211,11 @@ func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
 
 	if resp == nil || resp.StatusCode != http.StatusOK {
 		deadline, ok := ctx.Deadline()
-		statusCode := "nil" 
+		statusCode := "nil"
 		if resp != nil {
 			statusCode = fmt.Sprint(resp.StatusCode)
 		}
-		panicMessgae := fmt.Sprintf("Deadline set: %t, deadline value: %v, startTime: %v, timeout value: %v, statusCode: %s", ok, deadline, startTime, timeout, statusCode)
+		panicMessgae := fmt.Sprintf("Deadline set: %t, deadline value: %v, startTime: %v, timeout value: %v, statusCode: %s, stackTrace: ", ok, deadline, startTime, timeout, statusCode, debug.Stack())
 		panic(panicMessgae)
 	}
 	if resp.Body != nil {
