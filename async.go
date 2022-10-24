@@ -215,7 +215,7 @@ func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
 		if resp != nil {
 			statusCode = fmt.Sprint(resp.StatusCode)
 		}
-		panicMessgae := fmt.Sprintf("Deadline set: %t, deadline value: %v, startTime: %v, timeout value: %v, statusCode: %s, stackTrace: ", ok, deadline, startTime, timeout, statusCode, debug.Stack())
+		panicMessgae := fmt.Sprintf("Deadline set: %t, deadline value: %v, startTime: %v, timeout value: %v, statusCode: %s, stackTrace: %s", ok, deadline, startTime, timeout, statusCode, string(debug.Stack()))
 		panic(panicMessgae)
 	}
 	if resp.Body != nil {
