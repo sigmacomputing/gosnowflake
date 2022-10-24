@@ -193,3 +193,36 @@ func (sr *snowflakeRestful) getAsyncOrStatus(
 
 	return response, nil
 }
+
+// if there is no response, from func get, check the timeout and the contextDeadline 
+func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
+	ctx context.Context,
+	url *url.URL,
+	headers map[string]string,
+	timeout time.Duration) (*execResponse, error) {
+	startTime := time.Now()
+	resp, err := sr.FuncGet(ctx, sr, url, headers, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp == nil || resp.StatusCode != http.StatusOK {
+		deadline, ok := ctx.Deadline()
+		statusCode := "nil" 
+		if resp != nil {
+			statusCode = string(resp.StatusCode)
+		}
+		panicMessgae := fmt.Sprintf("Deadline set: %t, deadline value: %v, startTime: %v, timeout value: %v, statusCode: %s", ok, deadline, startTime, timeout, statusCode)
+		panic(panicMessgae)
+	}
+	if resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+
+	response := &execResponse{}
+	if err = json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
