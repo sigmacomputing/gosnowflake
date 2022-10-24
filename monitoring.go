@@ -247,7 +247,7 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	var response *execResponse
 	var err error
 	for response == nil || isQueryInProgress(response) {
-		response, err = sc.rest.getAsyncOrStatus(ctx, url, headers, sc.rest.RequestTimeout)
+		response, err = sc.rest.getAsyncOrStatusWithPanic(ctx, url, headers, sc.rest.RequestTimeout)
 
 		// if the context is canceled, we have to cancel it manually now
 		if err != nil {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"time"
@@ -195,6 +196,7 @@ func (sr *snowflakeRestful) getAsyncOrStatus(
 }
 
 // if there is no response, from func get, check the timeout and the contextDeadline 
+// and panic to look into the stack trace 
 func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
 	ctx context.Context,
 	url *url.URL,
