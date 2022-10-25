@@ -196,7 +196,7 @@ func (sr *snowflakeRestful) getAsyncOrStatus(
 	return response, nil
 }
 
-// panic message for no response
+// panic message for no response from get func
 type panicMessageType = struct {
 	deadlineSet bool
 	deadline    time.Time
@@ -248,6 +248,8 @@ func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
 		return nil, err
 	}
 
+	// if we dont get a response, or we get a bad response, this is not expected, so derive the information to know
+	// why this happened and panic with that message
 	if resp == nil || resp.StatusCode != http.StatusOK {
 		panicMessage := getPanicMessage(ctx, resp, startTime, timeout)
 		panic(panicMessage)
