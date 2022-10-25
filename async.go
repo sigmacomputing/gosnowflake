@@ -180,79 +180,18 @@ func (sr *snowflakeRestful) getAsyncOrStatus(
 	url *url.URL,
 	headers map[string]string,
 	timeout time.Duration) (*execResponse, error) {
-	resp, err := sr.FuncGet(ctx, sr, url, headers, timeout)
-	if err != nil {
-		return nil, err
-	}
-	if resp.Body != nil {
-		defer func() { _ = resp.Body.Close() }()
-	}
-
-	response := &execResponse{}
-	if err = json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
-// panic message for no response from get func
-type panicMessageType = struct {
-	deadlineSet bool
-	deadline    time.Time
-	startTime   time.Time
-	timeout     time.Duration
-	statusCode  string
-	stack       *[]uintptr
-}
-
-func getPanicMessage(
-	ctx context.Context,
-	resp *http.Response,
-	startTime time.Time,
-	timeout time.Duration,
-) panicMessageType {
-
-	var pcs [32]uintptr
-	stackEntries := runtime.Callers(1, pcs[:])
-	stackTrace := pcs[0:stackEntries]
-
-	deadline, ok := ctx.Deadline()
-
-	statusCode := "nil"
-	if resp != nil {
-		statusCode = fmt.Sprint(resp.StatusCode)
-	}
-
-	panicMessage := panicMessageType{
-		deadlineSet: ok,
-		deadline:    deadline,
-		startTime:   startTime,
-		timeout:     timeout,
-		statusCode:  statusCode,
-		stack:       &stackTrace,
-	}
-	return panicMessage
-}
-
-// if there is no response, from func get, check the timeout and the contextDeadline
-// and panic to look into the stack trace
-func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
-	ctx context.Context,
-	url *url.URL,
-	headers map[string]string,
-	timeout time.Duration) (*execResponse, error) {
 	startTime := time.Now()
 	resp, err := sr.FuncGet(ctx, sr, url, headers, timeout)
 	if err != nil {
 		return nil, err
 	}
-
-	// if we dont get a response, or we get a bad response, this is not expected, so derive the information to know
-	// why this happened and panic with that message
-	if resp == nil || resp.StatusCode != http.StatusOK {
-		panicMessage := getPanicMessage(ctx, resp, startTime, timeout)
-		panic(panicMessage)
+	if reportAsyncError(ctx) {
+		// if we dont get a response, or we get a bad response, this is not expected, so derive the information to know
+		// why this happened and panic with that message
+		if resp == nil || resp.StatusCode != http.StatusOK {
+			panicMessage := getPanicMessage(ctx, resp, startTime, timeout)
+			panic(panicMessage)
+		}
 	}
 	if resp.Body != nil {
 		defer func() { _ = resp.Body.Close() }()
