@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func reportAsyncFromContext(ctx context.Context) bool {
+func reportAsyncErrorFromContext(ctx context.Context) bool {
 	val := ctx.Value(reportAsyncError)
 	if val == nil {
 		return false

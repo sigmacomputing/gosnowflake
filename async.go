@@ -185,7 +185,7 @@ func (sr *snowflakeRestful) getAsyncOrStatus(
 	if err != nil {
 		return nil, err
 	}
-	if reportAsyncFromContext(ctx) {
+	if reportAsyncErrorFromContext(ctx) {
 		// if we dont get a response, or we get a bad response, this is not expected, so derive the information to know
 		// why this happened and panic with that message
 		if resp == nil || resp.StatusCode != http.StatusOK {
