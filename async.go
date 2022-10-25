@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"runtime/debug"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -196,6 +196,45 @@ func (sr *snowflakeRestful) getAsyncOrStatus(
 	return response, nil
 }
 
+// panic message for no response
+type panicMessageType = struct {
+	deadlineSet bool
+	deadline    time.Time
+	startTime   time.Time
+	timeout     time.Duration
+	statusCode  string
+	stack       *[]uintptr
+}
+
+func getPanicMessage(
+	ctx context.Context,
+	resp *http.Response,
+	startTime time.Time,
+	timeout time.Duration,
+) panicMessageType {
+
+	var pcs [32]uintptr
+	stackEntries := runtime.Callers(1, pcs[:])
+	stackTrace := pcs[0:stackEntries]
+
+	deadline, ok := ctx.Deadline()
+
+	statusCode := "nil"
+	if resp != nil {
+		statusCode = fmt.Sprint(resp.StatusCode)
+	}
+
+	panicMessage := panicMessageType{
+		deadlineSet: ok,
+		deadline:    deadline,
+		startTime:   startTime,
+		timeout:     timeout,
+		statusCode:  statusCode,
+		stack:       &stackTrace,
+	}
+	return panicMessage
+}
+
 // if there is no response, from func get, check the timeout and the contextDeadline
 // and panic to look into the stack trace
 func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
@@ -210,13 +249,8 @@ func (sr *snowflakeRestful) getAsyncOrStatusWithPanic(
 	}
 
 	if resp == nil || resp.StatusCode != http.StatusOK {
-		deadline, ok := ctx.Deadline()
-		statusCode := "nil"
-		if resp != nil {
-			statusCode = fmt.Sprint(resp.StatusCode)
-		}
-		panicMessgae := fmt.Sprintf("Deadline set: %t, deadline value: %v, startTime: %v, timeout value: %v, statusCode: %s, stackTrace: %s", ok, deadline, startTime, timeout, statusCode, string(debug.Stack()))
-		panic(panicMessgae)
+		panicMessage := getPanicMessage(ctx, resp, startTime, timeout)
+		panic(panicMessage)
 	}
 	if resp.Body != nil {
 		defer func() { _ = resp.Body.Close() }()
