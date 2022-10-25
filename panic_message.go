@@ -27,7 +27,7 @@ type panicMessageType = struct {
 	stack       *[]uintptr
 }
 
-func getPanicMessage(
+func newPanicMessage(
 	ctx context.Context,
 	resp *http.Response,
 	startTime time.Time,
