@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strconv"
 	"time"
 )
