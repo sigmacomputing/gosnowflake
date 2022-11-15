@@ -187,8 +187,13 @@ func (sc *snowflakeConn) getQueryResultResp(
 	ctx context.Context,
 	resultPath string,
 ) (*execResponse, error) {
+	var cached_result *execResponse
 	if respd, ok := sc.execRespCache.load(resultPath); ok {
-		return respd, nil
+		if logResultCacheComparisonFromContext(ctx) {
+			cached_result = respd
+		} else {
+			return respd, nil
+		}
 	}
 
 	headers := getHeaders()
@@ -213,6 +218,13 @@ func (sc *snowflakeConn) getQueryResultResp(
 	if err = json.NewDecoder(res.Body).Decode(&respd); err != nil {
 		logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
 		return nil, err
+	}
+
+	// log result comparison based on organization id
+	if logResultCacheComparisonFromContext(ctx) && cached_result != nil {
+		// compare the results from cached value and call from sf
+		logger.Info("Result returned from snowflake: ", respd.Data)
+		logger.Info("Result returned from cache: ", cached_result.Data)
 	}
 
 	sc.execRespCache.store(resultPath, respd)

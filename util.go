@@ -14,19 +14,20 @@ import (
 type contextKey string
 
 const (
-	multiStatementCount   contextKey = "MULTI_STATEMENT_COUNT"
-	asyncMode             contextKey = "ASYNC_MODE_QUERY"
-	asyncModeNoFetch      contextKey = "ASYNC_MODE_NO_FETCH_QUERY"
-	queryIDChannel        contextKey = "QUERY_ID_CHANNEL"
-	snowflakeRequestIDKey contextKey = "SNOWFLAKE_REQUEST_ID"
-	fetchResultByID       contextKey = "SF_FETCH_RESULT_BY_ID"
-	fileStreamFile        contextKey = "STREAMING_PUT_FILE"
-	fileTransferOptions   contextKey = "FILE_TRANSFER_OPTIONS"
-	enableHigherPrecision contextKey = "ENABLE_HIGHER_PRECISION"
-	arrowBatches          contextKey = "ARROW_BATCHES"
-	queryTag              contextKey = "QUERY_TAG"
-	submitSync            contextKey = "SUBMIT_SYNC"
-	reportAsyncError      contextKey = "REPORT_ASYNC_ERROR"
+	multiStatementCount      contextKey = "MULTI_STATEMENT_COUNT"
+	asyncMode                contextKey = "ASYNC_MODE_QUERY"
+	asyncModeNoFetch         contextKey = "ASYNC_MODE_NO_FETCH_QUERY"
+	queryIDChannel           contextKey = "QUERY_ID_CHANNEL"
+	snowflakeRequestIDKey    contextKey = "SNOWFLAKE_REQUEST_ID"
+	fetchResultByID          contextKey = "SF_FETCH_RESULT_BY_ID"
+	fileStreamFile           contextKey = "STREAMING_PUT_FILE"
+	fileTransferOptions      contextKey = "FILE_TRANSFER_OPTIONS"
+	enableHigherPrecision    contextKey = "ENABLE_HIGHER_PRECISION"
+	arrowBatches             contextKey = "ARROW_BATCHES"
+	queryTag                 contextKey = "QUERY_TAG"
+	submitSync               contextKey = "SUBMIT_SYNC"
+	reportAsyncError         contextKey = "REPORT_ASYNC_ERROR"
+	logResultCacheComparison contextKey = "LOG_RESULT_CACHE_COMPARISON"
 )
 
 const (
@@ -115,6 +116,11 @@ func WithSubmitSync(ctx context.Context) context.Context {
 // any data that could be useful for debugging waitForCompletedQueryResultResp
 func WithReportAsyncError(ctx context.Context) context.Context {
 	return context.WithValue(ctx, reportAsyncError, true)
+}
+
+// WithLogResultCacheComparison returns a context that enables logging caching result
+func WithLogResultCacheComparison(ctx context.Context) context.Context {
+	return context.WithValue(ctx, logResultCacheComparison, true)
 }
 
 // Get the request ID from the context if specified, otherwise generate one
