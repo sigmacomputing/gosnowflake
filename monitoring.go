@@ -227,7 +227,6 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	// if we already have the response; return that
 	cachedResponse, ok := sc.execRespCache.load(resultPath)
 	logger.WithContext(ctx).Errorf("use cache: %v", ok)
-	fmt.Println(("use cache: %v", ok))
 	if ok {
 		return cachedResponse, nil
 	}
