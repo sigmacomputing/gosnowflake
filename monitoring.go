@@ -357,6 +357,26 @@ func (sc *snowflakeConn) blockOnRunningQuery(
 	return nil
 }
 
+func (sc *snowflakeConn) 
+Query2(
+	ctx context.Context,
+	qid string,
+) error {
+	stillRunning := ErrQueryIsRunning
+	var err error 
+	for stillRunning == ErrQueryIsRunning {
+		_, err := sc.checkQueryStatus(ctx, qid)
+
+		// no error here means query is done and has suceeded 
+		if err == nil {
+			return nil
+		}
+		
+		stillRunning = err.(*SnowflakeError).Number
+	}
+	return err
+}
+
 // prepare a Rows object to return for query of 'qid'
 func (sc *snowflakeConn) buildRowsForRunningQuery(
 	ctx context.Context,
@@ -378,7 +398,7 @@ func (sc *snowflakeConn) blockOnQueryCompletion(
 	ctx context.Context,
 	qid string,
 ) error {
-	if err := sc.blockOnRunningQuery(ctx, qid); err != nil {
+	if err := sc.blockOnRunningQuery2(ctx, qid); err != nil {
 		return err
 	}
 	return nil
