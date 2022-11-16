@@ -222,19 +222,22 @@ func (sc *snowflakeConn) getQueryResultResp(
 // Waits for the query to complete, then returns the response
 func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	ctx context.Context,
-	resultPath string,
+	qid string,
 ) (*execResponse, error) {
 	// if we already have the response; return that
-	cachedResponse, ok := sc.execRespCache.load(resultPath)
-	logger.WithContext(ctx).Errorf("use cache: %v", ok)
-	if ok {
+	resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
+
+	// check if the response is cached
+	if cachedResponse, ok := sc.execRespCache.load(resultPath); ok {
 		return cachedResponse, nil
 	}
+
 	requestID := getOrGenerateRequestIDFromContext(ctx)
 	headers := getHeaders()
 	if serviceName, ok := sc.cfg.Params[serviceName]; ok {
 		headers[httpHeaderServiceName] = *serviceName
 	}
+
 	param := make(url.Values)
 	param.Add(requestIDKey, requestID.String())
 	param.Add("clientStartTime", strconv.FormatInt(time.Now().Unix(), 10))
@@ -256,7 +259,7 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 			logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
 			if err == context.Canceled || err == context.DeadlineExceeded {
 				// use the default top level 1 sec timeout for cancellation as throughout the driver
-				if err := cancelQuery(context.TODO(), sc.rest, requestID, time.Second); err != nil {
+				if err := cancelQuery(ctx, sc.rest, requestID, time.Second); err != nil {
 					logger.WithContext(ctx).Errorf("failed to cancel async query, err: %v", err)
 				}
 			}
@@ -308,55 +311,6 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 	return nil
 }
 
-// Wait for query to complete from a query id from /queries/<qid>/result endpoint.
-func (sc *snowflakeConn) blockOnRunningQuery(
-	ctx context.Context, qid string) error {
-	resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
-	resp, err := sc.waitForCompletedQueryResultResp(ctx, resultPath)
-	if err != nil {
-		logger.WithContext(ctx).Errorf("error: %v", err)
-		if resp != nil {
-			code := -1
-			if resp.Code != "" {
-				code, err = strconv.Atoi(resp.Code)
-				if err != nil {
-					return err
-				}
-			}
-			if code == -1 {
-				ok, deadline := ctx.Deadline()
-				logger.WithContext(ctx).Errorf("Deadline: %v, ok: %v", deadline, ok)
-				logger.WithContext(ctx).Errorf("response: %v, error: %v", resp, err)
-			}
-			return (&SnowflakeError{
-				Number:   code,
-				SQLState: resp.Data.SQLState,
-				Message:  err.Error(),
-				QueryID:  resp.Data.QueryID,
-			}).exceptionTelemetry(sc)
-		}
-		return err
-	}
-	if !resp.Success {
-		message := resp.Message
-		code := -1
-		if resp.Code != "" {
-			code, err = strconv.Atoi(resp.Code)
-			if err != nil {
-				code = ErrQueryStatus
-				message = fmt.Sprintf("%s: (failed to parse original code: %s: %s)", message, resp.Code, err.Error())
-			}
-		}
-		return (&SnowflakeError{
-			Number:   code,
-			SQLState: resp.Data.SQLState,
-			Message:  message,
-			QueryID:  resp.Data.QueryID,
-		}).exceptionTelemetry(sc)
-	}
-	return nil
-}
-
 // prepare a Rows object to return for query of 'qid'
 func (sc *snowflakeConn) buildRowsForRunningQuery(
 	ctx context.Context,
@@ -374,12 +328,14 @@ func (sc *snowflakeConn) buildRowsForRunningQuery(
 	return rows, nil
 }
 
+// Wait for query to complete from a query id from /queries/<qid>/result endpoint.
 func (sc *snowflakeConn) blockOnQueryCompletion(
 	ctx context.Context,
 	qid string,
 ) error {
-	if err := sc.blockOnRunningQuery(ctx, qid); err != nil {
-		return err
+	resp, err := sc.waitForCompletedQueryResultResp(ctx, qid)
+	if err != nil || !resp.Success {
+		return sc.rewriteError(ctx, resp, err)
 	}
 	return nil
 }
@@ -482,4 +438,43 @@ func (sc *snowflakeConn) getMonitoringResult(ctx context.Context, endpoint, qid 
 	}
 
 	return nil
+}
+
+func (sc *snowflakeConn) rewriteError(ctx context.Context, resp *execResponse, err error) error {
+	// if function returned an error, rewrite as snowflake
+	if err != nil {
+		logger.WithContext(ctx).Errorf("error: %v", err)
+		if resp != nil {
+			// if there is a response code decode it
+			if resp.Code != "" {
+				code, err := strconv.Atoi(resp.Code)
+				if err != nil {
+					return err
+				}
+				return (&SnowflakeError{
+					Number:   code,
+					SQLState: resp.Data.SQLState,
+					Message:  err.Error(),
+					QueryID:  resp.Data.QueryID,
+				}).exceptionTelemetry(sc)
+			}
+		}
+		return err
+	}
+	// if there is no error, but the request was not sucessful, return it
+	message := resp.Message
+	code := -1
+	if resp.Code != "" {
+		code, err = strconv.Atoi(resp.Code)
+		if err != nil {
+			code = ErrQueryStatus
+			message = fmt.Sprintf("%s: (failed to parse original code: %s: %s)", message, resp.Code, err.Error())
+		}
+	}
+	return (&SnowflakeError{
+		Number:   code,
+		SQLState: resp.Data.SQLState,
+		Message:  message,
+		QueryID:  resp.Data.QueryID,
+	}).exceptionTelemetry(sc)
 }
