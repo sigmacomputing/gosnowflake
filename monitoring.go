@@ -187,9 +187,10 @@ func (sc *snowflakeConn) getQueryResultResp(
 	ctx context.Context,
 	resultPath string,
 ) (*execResponse, error) {
-	if respd, ok := sc.execRespCache.load(resultPath); ok {
-		return respd, nil
-	}
+	// disable cache, ref: SIG-27431
+	//if respd, ok := sc.execRespCache.load(resultPath); ok {
+	//	return respd, nil
+	//}
 
 	headers := getHeaders()
 	if serviceName, ok := sc.cfg.Params[serviceName]; ok {
@@ -215,7 +216,7 @@ func (sc *snowflakeConn) getQueryResultResp(
 		return nil, err
 	}
 
-	sc.execRespCache.store(resultPath, respd)
+	//sc.execRespCache.store(resultPath, respd)
 	return respd, nil
 }
 
