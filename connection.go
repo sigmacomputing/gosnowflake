@@ -643,8 +643,9 @@ func (sc *snowflakeConn) SubmitQueryAsync(
 	}
 
 	ctx = setResultType(ctx, queryResultType)
+	isDesc := isDescribeOnly(ctx)
 
-	data, err := sc.exec(ctx, query, true /* noResult */, false /* isInternal */, false /* isDesc */, args)
+	data, err := sc.exec(ctx, query, true /* noResult */, false /* isInternal */, isDesc, args)
 	if err != nil {
 		logger.WithContext(ctx).Errorf("error: %v", err)
 		if data != nil {
