@@ -613,6 +613,80 @@ func (sc *snowflakeConn) SubmitQuerySync(
 	return rows.(*snowflakeRows), nil
 }
 
+// AsyncSubmitter is an interface that allows executing a query asynchronously
+// while only fetching the result if the query completes within 45 seconds.
+type AsyncSubmitter interface {
+	SubmitQueryAsync(ctx context.Context, query string) (string, error) /*queryId, err*/
+}
+
+func (sc *snowflakeConn) SubmitQueryAsync(
+	ctx context.Context,
+	query string,
+	args []driver.NamedValue,
+) (string, error) {
+	ctx = WithAsyncMode(WithAsyncModeNoFetch(ctx))
+	qid, err := getResumeQueryID(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	// if query already submitted, return the query id
+	if qid != "" {
+		return qid, nil
+	}
+
+	// if the query is not submitted, submit it
+	logger.WithContext(ctx).Infof("Query: %#v, %v", query, args)
+
+	if sc.rest == nil {
+		return "", driver.ErrBadConn
+	}
+
+	ctx = setResultType(ctx, queryResultType)
+
+	data, err := sc.exec(ctx, query, true /* noResult */, false /* isInternal */, false /* isDesc */, args)
+	if err != nil {
+		logger.WithContext(ctx).Errorf("error: %v", err)
+		if data != nil {
+			code, err := strconv.Atoi(data.Code)
+			if err != nil {
+				return "", err
+			}
+			return "", (&SnowflakeError{
+				Number:   code,
+				SQLState: data.Data.SQLState,
+				Message:  err.Error(),
+				QueryID:  data.Data.QueryID,
+			}).exceptionTelemetry(sc)
+		}
+		return "", err
+	}
+	fmt.Println("data.Data.AsyncRow: ", data.Data.QueryID)
+	return data.Data.QueryID, nil
+
+	// could potentially wait one second here to return results immediately
+
+	/* ... maybe something like this
+	param := make(url.Values)
+	param.Add(requestGUIDKey, NewUUID().String())
+	resultPath := fmt.Sprintf("/monitoring/%s/queries", qid)
+	url := sc.rest.getFullURL(resultPath, &param)
+
+	oneSecond := time.Now + time.Second()
+	for stillRunning == ErrQueryIsRunning && time.Now() < oneSecond {
+		_, err := sc.checkQueryStatus(ctx, qid)
+
+		// no error here means query is done and has suceeded
+		if err == nil {
+			return nil
+		}
+
+		stillRunning = err.(*SnowflakeError).Number
+	}
+	resp, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
+	*/
+}
+
 // TokenGetter is an interface that can be used to get the current tokens and session
 // ID from a Snowflake connection. This returns the following values:
 //  - token: The temporary credential used to authenticate requests to Snowflake's API.
