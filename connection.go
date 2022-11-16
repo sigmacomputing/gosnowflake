@@ -540,87 +540,6 @@ func buildSnowflakeConn(ctx context.Context, config Config) (*snowflakeConn, err
 
 	return sc, nil
 }
-
-// FetchResult returns a Rows handle for a previously issued query,
-// given the snowflake query-id. This functionality is not used by the
-// go sql library but is exported to clients who can make use of this
-// capability explicitly.
-//
-// See the ResultFetcher interface.
-func (sc *snowflakeConn) FetchResult(ctx context.Context, qid string) (driver.Rows, error) {
-	return sc.buildRowsForRunningQuery(ctx, qid)
-}
-
-// WaitForQueryCompletion waits for the result of a previously issued query,
-// given the snowflake query-id. This functionality is not used by the
-// go sql library but is exported to clients who can make use of this
-// capability explicitly.
-func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string) error {
-	return sc.blockOnQueryCompletion(ctx, qid)
-}
-
-// ResultFetcher is an interface which allows a query result to be
-// fetched given the corresponding snowflake query-id.
-//
-// The raw gosnowflake connection implements this interface and we
-// export it so that clients can access this functionality, bypassing
-// the alternative which is the query it via the RESULT_SCAN table
-// function.
-type ResultFetcher interface {
-	FetchResult(ctx context.Context, qid string) (driver.Rows, error)
-	WaitForQueryCompletion(ctx context.Context, qid string) error
-}
-
-// MonitoringResultFetcher is an interface which allows to fetch monitoringResult
-// with snowflake connection and query-id.
-type MonitoringResultFetcher interface {
-	FetchMonitoringResult(queryID string, runtime time.Duration) (*monitoringResult, error)
-}
-
-// FetchMonitoringResult returns a monitoringResult object
-// Multiplex can call monitoringResult.Monitoring() to get the QueryMonitoringData
-func (sc *snowflakeConn) FetchMonitoringResult(queryID string, runtime time.Duration) (*monitoringResult, error) {
-	if sc.rest == nil {
-		return nil, driver.ErrBadConn
-	}
-
-	// set the fake runtime just to bypass fast query
-	monitoringResult := mkMonitoringFetcher(sc, queryID, runtime)
-	return monitoringResult, nil
-}
-
-// QuerySubmitter is an interface that allows executing a query synchronously
-// while only fetching the result if the query completes within 45 seconds.
-type QuerySubmitter interface {
-	SubmitQuerySync(ctx context.Context, query string) (SnowflakeResult, error)
-}
-
-// SubmitQuerySync submits the given query for execution, and waits synchronously
-// for up to 45 seconds.
-// If the query complete within that duration, the SnowflakeResult is marked as complete,
-// and the results can be fetched via the GetArrowBatches() method.
-// Otherwise, the caller can use the provided query ID to fetch the query's results
-// asynchronously. The caller must fetch the results of a query that is still running
-// within 300 seconds, otherwise the query will be aborted.
-func (sc *snowflakeConn) SubmitQuerySync(
-	ctx context.Context,
-	query string,
-	args ...driver.NamedValue,
-) (SnowflakeResult, error) {
-	rows, err := sc.queryContextInternal(WithSubmitSync(WithArrowBatches(ctx)), query, args)
-	if err != nil {
-		return nil, err
-	}
-
-	return rows.(*snowflakeRows), nil
-}
-
-// AsyncSubmitter is an interface that allows executing a query asynchronously
-// while only fetching the result if the query completes within 45 seconds.
-type AsyncSubmitter interface {
-	SubmitQueryAsync(ctx context.Context, query string) (queryId, isComplete, error)
-}
-
 func (sc *snowflakeConn) SubmitQueryAsync(
 	ctx context.Context,
 	query string,
@@ -691,6 +610,81 @@ func (sc *snowflakeConn) wait500milliseconds(
 		statusErr = err.(*SnowflakeError).Number
 	}
 	return statusErr != ErrQueryIsRunning
+}
+
+// FetchResult returns a Rows handle for a previously issued query,
+// given the snowflake query-id. This functionality is not used by the
+// go sql library but is exported to clients who can make use of this
+// capability explicitly.
+//
+// See the ResultFetcher interface.
+func (sc *snowflakeConn) FetchResult(ctx context.Context, qid string) (driver.Rows, error) {
+	return sc.buildRowsForRunningQuery(ctx, qid)
+}
+
+// WaitForQueryCompletion waits for the result of a previously issued query,
+// given the snowflake query-id. This functionality is not used by the
+// go sql library but is exported to clients who can make use of this
+// capability explicitly.
+func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string) error {
+	return sc.blockOnQueryCompletion(ctx, qid)
+}
+
+// ResultFetcher is an interface which allows a query result to be
+// fetched given the corresponding snowflake query-id.
+//
+// The raw gosnowflake connection implements this interface and we
+// export it so that clients can access this functionality, bypassing
+// the alternative which is the query it via the RESULT_SCAN table
+// function.
+type ResultFetcher interface {
+	FetchResult(ctx context.Context, qid string) (driver.Rows, error)
+	WaitForQueryCompletion(ctx context.Context, qid string) error
+	SubmitQueryAsync(ctx context.Context, query string) (queryId, isComplete, error)
+}
+
+// MonitoringResultFetcher is an interface which allows to fetch monitoringResult
+// with snowflake connection and query-id.
+type MonitoringResultFetcher interface {
+	FetchMonitoringResult(queryID string, runtime time.Duration) (*monitoringResult, error)
+}
+
+// FetchMonitoringResult returns a monitoringResult object
+// Multiplex can call monitoringResult.Monitoring() to get the QueryMonitoringData
+func (sc *snowflakeConn) FetchMonitoringResult(queryID string, runtime time.Duration) (*monitoringResult, error) {
+	if sc.rest == nil {
+		return nil, driver.ErrBadConn
+	}
+
+	// set the fake runtime just to bypass fast query
+	monitoringResult := mkMonitoringFetcher(sc, queryID, runtime)
+	return monitoringResult, nil
+}
+
+// QuerySubmitter is an interface that allows executing a query synchronously
+// while only fetching the result if the query completes within 45 seconds.
+type QuerySubmitter interface {
+	SubmitQuerySync(ctx context.Context, query string) (SnowflakeResult, error)
+}
+
+// SubmitQuerySync submits the given query for execution, and waits synchronously
+// for up to 45 seconds.
+// If the query complete within that duration, the SnowflakeResult is marked as complete,
+// and the results can be fetched via the GetArrowBatches() method.
+// Otherwise, the caller can use the provided query ID to fetch the query's results
+// asynchronously. The caller must fetch the results of a query that is still running
+// within 300 seconds, otherwise the query will be aborted.
+func (sc *snowflakeConn) SubmitQuerySync(
+	ctx context.Context,
+	query string,
+	args ...driver.NamedValue,
+) (SnowflakeResult, error) {
+	rows, err := sc.queryContextInternal(WithSubmitSync(WithArrowBatches(ctx)), query, args)
+	if err != nil {
+		return nil, err
+	}
+
+	return rows.(*snowflakeRows), nil
 }
 
 // TokenGetter is an interface that can be used to get the current tokens and session
