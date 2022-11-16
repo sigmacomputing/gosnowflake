@@ -43,6 +43,8 @@ const (
 )
 
 type resultType string
+type isComplete bool
+type queryId string
 
 const (
 	snowflakeResultType contextKey = "snowflakeResultType"
@@ -616,30 +618,30 @@ func (sc *snowflakeConn) SubmitQuerySync(
 // AsyncSubmitter is an interface that allows executing a query asynchronously
 // while only fetching the result if the query completes within 45 seconds.
 type AsyncSubmitter interface {
-	SubmitQueryAsync(ctx context.Context, query string) (string, error) /*queryId, err*/
+	SubmitQueryAsync(ctx context.Context, query string) (queryId, isComplete, error)
 }
 
 func (sc *snowflakeConn) SubmitQueryAsync(
 	ctx context.Context,
 	query string,
 	args []driver.NamedValue,
-) (string, error) {
+) (queryId, isComplete, error) {
 	ctx = WithAsyncMode(WithAsyncModeNoFetch(ctx))
 	qid, err := getResumeQueryID(ctx)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	// if query already submitted, return the query id
 	if qid != "" {
-		return qid, nil
+		return queryId(qid), false, nil
 	}
 
 	// if the query is not submitted, submit it
 	logger.WithContext(ctx).Infof("Query: %#v, %v", query, args)
 
 	if sc.rest == nil {
-		return "", driver.ErrBadConn
+		return "", false, driver.ErrBadConn
 	}
 
 	ctx = setResultType(ctx, queryResultType)
@@ -651,41 +653,44 @@ func (sc *snowflakeConn) SubmitQueryAsync(
 		if data != nil {
 			code, err := strconv.Atoi(data.Code)
 			if err != nil {
-				return "", err
+				return "", true, err
 			}
-			return "", (&SnowflakeError{
+			return "", true, (&SnowflakeError{
 				Number:   code,
 				SQLState: data.Data.SQLState,
 				Message:  err.Error(),
 				QueryID:  data.Data.QueryID,
 			}).exceptionTelemetry(sc)
 		}
-		return "", err
+		return "", true, err
 	}
-	fmt.Println("data.Data.AsyncRow: ", data.Data.QueryID)
-	return data.Data.QueryID, nil
 
-	// could potentially wait one second here to return results immediately
+	// wait 500 ms here to try to optomize for super fast queries
+	qid = data.Data.QueryID
+	isComplete := sc.wait500milliseconds(ctx, qid)
+	return queryId(qid), isComplete, nil
+}
 
-	/* ... maybe something like this
-	param := make(url.Values)
-	param.Add(requestGUIDKey, NewUUID().String())
-	resultPath := fmt.Sprintf("/monitoring/%s/queries", qid)
-	url := sc.rest.getFullURL(resultPath, &param)
+// waits 500 milliseconds to see if a query completes. If it does, we dont have to come back to wait for the query
+func (sc *snowflakeConn) wait500milliseconds(
+	ctx context.Context,
+	qid string,
+) isComplete {
+	// wait 500 ms here to try to optomize for super fast queries
+	stopWaiting := time.Now().Add(500 * time.Millisecond)
+	statusErr := ErrQueryIsRunning
 
-	oneSecond := time.Now + time.Second()
-	for stillRunning == ErrQueryIsRunning && time.Now() < oneSecond {
+	for (statusErr == ErrQueryIsRunning) && (time.Now().Before(stopWaiting)) {
 		_, err := sc.checkQueryStatus(ctx, qid)
 
 		// no error here means query is done and has suceeded
 		if err == nil {
-			return nil
+			return true
 		}
 
-		stillRunning = err.(*SnowflakeError).Number
+		statusErr = err.(*SnowflakeError).Number
 	}
-	resp, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
-	*/
+	return statusErr != ErrQueryIsRunning
 }
 
 // TokenGetter is an interface that can be used to get the current tokens and session
