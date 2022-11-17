@@ -73,8 +73,7 @@ func (sc *snowflakeConn) SubmitAsync(
 //
 // The raw gosnowflake connection implements this interface and we
 // export it so that clients can access this functionality, bypassing
-// the alternative which is the query it via the RESULT_SCAN table
-// function.
+// the alternative which is using the queryContext built into dbSql
 type AsyncSubmitter interface {
 	SubmitAsync(context.Context, string, []driver.NamedValue) (queryID, isComplete, error) 
 }
