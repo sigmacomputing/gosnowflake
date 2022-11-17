@@ -540,77 +540,6 @@ func buildSnowflakeConn(ctx context.Context, config Config) (*snowflakeConn, err
 
 	return sc, nil
 }
-func (sc *snowflakeConn) SubmitQueryAsync(
-	ctx context.Context,
-	query string,
-	args []driver.NamedValue,
-) (queryId, isComplete, error) {
-	ctx = WithAsyncMode(WithAsyncModeNoFetch(ctx))
-	qid, err := getResumeQueryID(ctx)
-	if err != nil {
-		return "", false, err
-	}
-
-	// if query already submitted, return the query id
-	if qid != "" {
-		return queryId(qid), false, nil
-	}
-
-	// if the query is not submitted, submit it
-	logger.WithContext(ctx).Infof("Query: %#v, %v", query, args)
-
-	if sc.rest == nil {
-		return "", false, driver.ErrBadConn
-	}
-
-	ctx = setResultType(ctx, queryResultType)
-	isDesc := isDescribeOnly(ctx)
-
-	data, err := sc.exec(ctx, query, true /* noResult */, false /* isInternal */, isDesc, args)
-	if err != nil {
-		logger.WithContext(ctx).Errorf("error: %v", err)
-		if data != nil {
-			code, err := strconv.Atoi(data.Code)
-			if err != nil {
-				return "", true, err
-			}
-			return "", true, (&SnowflakeError{
-				Number:   code,
-				SQLState: data.Data.SQLState,
-				Message:  err.Error(),
-				QueryID:  data.Data.QueryID,
-			}).exceptionTelemetry(sc)
-		}
-		return "", true, err
-	}
-
-	// wait 500 ms here to try to optomize for super fast queries
-	qid = data.Data.QueryID
-	isComplete := sc.wait500milliseconds(ctx, qid)
-	return queryId(qid), isComplete, nil
-}
-
-// waits 500 milliseconds to see if a query completes. If it does, we dont have to come back to wait for the query
-func (sc *snowflakeConn) wait500milliseconds(
-	ctx context.Context,
-	qid string,
-) isComplete {
-	// wait 500 ms here to try to optomize for super fast queries
-	stopWaiting := time.Now().Add(500 * time.Millisecond)
-	statusErr := ErrQueryIsRunning
-
-	for (statusErr == ErrQueryIsRunning) && (time.Now().Before(stopWaiting)) {
-		_, err := sc.checkQueryStatus(ctx, qid)
-
-		// no error here means query is done and has suceeded
-		if err == nil {
-			return true
-		}
-
-		statusErr = err.(*SnowflakeError).Number
-	}
-	return statusErr != ErrQueryIsRunning
-}
 
 // FetchResult returns a Rows handle for a previously issued query,
 // given the snowflake query-id. This functionality is not used by the
@@ -640,7 +569,6 @@ func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string)
 type ResultFetcher interface {
 	FetchResult(ctx context.Context, qid string) (driver.Rows, error)
 	WaitForQueryCompletion(ctx context.Context, qid string) error
-	SubmitQueryAsync(ctx context.Context, query string) (queryId, isComplete, error)
 }
 
 // MonitoringResultFetcher is an interface which allows to fetch monitoringResult

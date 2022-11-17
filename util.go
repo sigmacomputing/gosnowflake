@@ -27,6 +27,7 @@ const (
 	queryTag              contextKey = "QUERY_TAG"
 	submitSync            contextKey = "SUBMIT_SYNC"
 	reportAsyncError      contextKey = "REPORT_ASYNC_ERROR"
+	testNoCache           contextKey = "TEST_NO_CACHE"
 )
 
 const (
@@ -115,6 +116,22 @@ func WithSubmitSync(ctx context.Context) context.Context {
 // any data that could be useful for debugging waitForCompletedQueryResultResp
 func WithReportAsyncError(ctx context.Context) context.Context {
 	return context.WithValue(ctx, reportAsyncError, true)
+}
+
+func WithTestNoCache(ctx context.Context) context.Context {
+	return context.WithValue(ctx, testNoCache, true)
+}
+
+// I can see from logs that the failing queries do hit the cache
+// I cant confirm that this is the cause of the failure but testing it would be 
+// good 
+func isTestNoCache(ctx context.Context) bool {
+	val := ctx.Value(testNoCache)
+	if val == nil {
+		return false
+	}
+	a, ok := val.(bool)
+	return a && ok
 }
 
 // Get the request ID from the context if specified, otherwise generate one

@@ -227,8 +227,8 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	// if we already have the response; return that
 	resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
 
-	// check if the response is cached
-	if cachedResponse, ok := sc.execRespCache.load(resultPath); ok {
+	// check if the response is cached but not if the test no cache flag is set
+	if cachedResponse, ok := sc.execRespCache.load(resultPath); ok && !isTestNoCache(ctx) {
 		return cachedResponse, nil
 	}
 
