@@ -66,3 +66,15 @@ func (sc *snowflakeConn) SubmitAsync(
 
 	return queryID(qid), false, nil
 }
+
+// AsyncSubmitter is an interface which allows a query to be submitted
+// and then allows us to wait for the query to complete given the query id
+// this interface is needed for multiplex recovery 
+//
+// The raw gosnowflake connection implements this interface and we
+// export it so that clients can access this functionality, bypassing
+// the alternative which is the query it via the RESULT_SCAN table
+// function.
+type AsyncSubmitter interface {
+	SubmitAsync(context.Context, string, []driver.NamedValue) (queryID, isComplete, error) 
+}
