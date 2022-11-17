@@ -43,8 +43,6 @@ const (
 )
 
 type resultType string
-type isComplete bool
-type queryId string
 
 const (
 	snowflakeResultType contextKey = "snowflakeResultType"
