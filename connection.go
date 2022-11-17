@@ -567,7 +567,7 @@ func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string)
 type ResultFetcher interface {
 	FetchResult(ctx context.Context, qid string) (driver.Rows, error)
 	WaitForQueryCompletion(ctx context.Context, qid string) error
-	SubmitAsync(context.Context, string, []driver.NamedValue) (queryId, isComplete, error) // leave this in for rebase
+	SubmitAsync(context.Context, string, []driver.NamedValue) (queryID, isComplete, error) // leave this in for rebase
 }
 
 // MonitoringResultFetcher is an interface which allows to fetch monitoringResult
