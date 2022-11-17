@@ -11,13 +11,13 @@ import (
 )
 
 type isComplete bool
-type queryId string
+type queryID string
 
-func (sc *snowflakeConn) v(
+func (sc *snowflakeConn) SubmitAsync(
 	ctx context.Context,
 	query string,
 	args []driver.NamedValue,
-) (queryId, isComplete, error) {
+) (queryID, isComplete, error) {
 	ctx = WithAsyncMode(WithAsyncModeNoFetch(ctx))
 	qid, err := getResumeQueryID(ctx)
 	if err != nil {
@@ -26,7 +26,7 @@ func (sc *snowflakeConn) v(
 
 	// if query already submitted, return the query id
 	if qid != "" {
-		return queryId(qid), false, nil
+		return queryID(qid), false, nil
 	}
 
 	// if the query is not submitted, submit it
@@ -61,8 +61,8 @@ func (sc *snowflakeConn) v(
 	_, err = sc.checkQueryStatus(ctx, qid)
 	if err == nil {
 		// no error means query is complete
-		return queryId(qid), true, nil
+		return queryID(qid), true, nil
 	}
 
-	return queryId(qid), false, nil
+	return queryID(qid), false, nil
 }
