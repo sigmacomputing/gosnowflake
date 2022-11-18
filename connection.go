@@ -555,7 +555,7 @@ func (sc *snowflakeConn) FetchResult(ctx context.Context, qid string) (driver.Ro
 // capability explicitly.
 func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string) error {
 	// if the query is already done, we dont need to wait for it 
-	complete, err := checkIfComplete(ctx, qid) 
+	complete, err := sc.checkIfComplete(ctx, qid) 
 	if complete {
 		return err
 	}
