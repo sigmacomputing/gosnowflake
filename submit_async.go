@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-// Return type for submitAsync. QueryId and boolian value to indicate whether we have to come back and
+// SubmitAsyncResponse is the return type for submitAsync. QueryId and boolian value to indicate whether we have to come back and
 // wait for a query to complete.
 type SubmitAsyncResponse struct {
 	QueryID  string
