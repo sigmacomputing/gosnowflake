@@ -327,6 +327,9 @@ func (sc *snowflakeConn) blockOnRunningQuery(
 				ok, deadline := ctx.Deadline()
 				logger.WithContext(ctx).Errorf("Deadline: %v, ok: %v", deadline, ok)
 				logger.WithContext(ctx).Errorf("response: %v, error: %v", resp, err)
+				if sc.rest == nil {
+					logger.WithContext(ctx).Errorf("sullSnowflakeRestful")
+				}
 			}
 			return (&SnowflakeError{
 				Number:   code,
@@ -345,6 +348,14 @@ func (sc *snowflakeConn) blockOnRunningQuery(
 			if err != nil {
 				code = ErrQueryStatus
 				message = fmt.Sprintf("%s: (failed to parse original code: %s: %s)", message, resp.Code, err.Error())
+			}
+		}
+		if code == -1 {
+			ok, deadline := ctx.Deadline()
+			logger.WithContext(ctx).Errorf("Deadline: %v, ok: %v", deadline, ok)
+			logger.WithContext(ctx).Errorf("response: %v, error: %v", resp, err)
+			if sc.rest == nil {
+				logger.WithContext(ctx).Errorf("sullSnowflakeRestful")
 			}
 		}
 		return (&SnowflakeError{
