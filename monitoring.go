@@ -328,7 +328,7 @@ func (sc *snowflakeConn) blockOnRunningQuery(
 				logger.WithContext(ctx).Errorf("Deadline: %v, ok: %v", deadline, ok)
 				logger.WithContext(ctx).Errorf("response: %v, error: %v", resp, err)
 				if sc.rest == nil {
-					logger.WithContext(ctx).Errorf("sullSnowflakeRestful")
+					logger.WithContext(ctx).Errorf("nullSnowflakeRestful")
 				}
 			}
 			return (&SnowflakeError{
@@ -355,7 +355,7 @@ func (sc *snowflakeConn) blockOnRunningQuery(
 			logger.WithContext(ctx).Errorf("Deadline: %v, ok: %v", deadline, ok)
 			logger.WithContext(ctx).Errorf("response: %v, error: %v", resp, err)
 			if sc.rest == nil {
-				logger.WithContext(ctx).Errorf("sullSnowflakeRestful")
+				logger.WithContext(ctx).Errorf("nullSnowflakeRestful")
 			}
 		}
 		return (&SnowflakeError{
