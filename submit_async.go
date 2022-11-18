@@ -48,7 +48,7 @@ func (sc *snowflakeConn) SubmitAsync(
 		return SubmitAsyncResponse{
 			QueryID:  "",
 			Complete: false,
-		}, err
+		}, driver.ErrBadConn
 	}
 
 	ctx = setResultType(ctx, queryResultType)
