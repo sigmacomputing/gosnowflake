@@ -560,15 +560,15 @@ func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string)
 	if err == nil {
 		return nil
 	}
-	// query is complete because of an error; return that error
+	// if error = query is still running; wait for it to complete
 	switch v := err.(type) {
 	case *SnowflakeError:
-		if v.Number != ErrQueryIsRunning {
-			return err
+		if v.Number == ErrQueryIsRunning {
+			return sc.blockOnQueryCompletion(ctx, qid)
 		}
 	}
-	// query is still running; wait for it to complete
-	return sc.blockOnQueryCompletion(ctx, qid)
+	// query is complete because of an error; return that error
+	return err
 }
 
 // ResultFetcher is an interface which allows a query result to be
