@@ -561,8 +561,11 @@ func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string)
 		return nil
 	}
 	// query is complete because of an error; return that error
-	if err.(*SnowflakeError).Number != ErrQueryIsRunning {
-		return err
+	switch v := err.(type) {
+	case *SnowflakeError:
+		if v.Number != ErrQueryIsRunning {
+			return err
+		}
 	}
 	// query is still running; wait for it to complete
 	return sc.blockOnQueryCompletion(ctx, qid)
