@@ -295,6 +295,7 @@ func logEverything(ctx context.Context, qid string, response *execResponse, star
 	}
 
 	logger.WithContext(ctx).Errorf("failed queryId: %v, response message: %v", qid, response.Message)
+	logger.WithContext(ctx).Errorf("failed queryId: %v, response code: %v", qid, response.Code)
 }
 
 // Fetch query result for a query id from /queries/<qid>/result endpoint.
