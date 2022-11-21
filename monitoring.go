@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -223,6 +224,7 @@ func (sc *snowflakeConn) getQueryResultResp(
 func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	ctx context.Context,
 	resultPath string,
+	qid string,
 ) (*execResponse, error) {
 	// if we already have the response; return that
 	cachedResponse, ok := sc.execRespCache.load(resultPath)
@@ -339,7 +341,7 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 func (sc *snowflakeConn) blockOnRunningQuery(
 	ctx context.Context, qid string) error {
 	resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
-	resp, err := sc.waitForCompletedQueryResultResp(ctx, resultPath)
+	resp, err := sc.waitForCompletedQueryResultResp(ctx, resultPath, qid)
 	if err != nil {
 		logger.WithContext(ctx).Errorf("error: %v", err)
 		if resp != nil {
