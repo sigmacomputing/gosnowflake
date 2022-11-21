@@ -7,6 +7,7 @@ package gosnowflake
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"strconv"
 )
 
@@ -93,12 +94,22 @@ func (sc *snowflakeConn) SubmitAsync(
 }
 
 func (sc *snowflakeConn) checkIfComplete(ctx context.Context, qid string) bool {
+	// if the query is already done, we dont need to wait for it
 	_, err := sc.checkQueryStatus(ctx, qid)
-	if err == nil || err.(*SnowflakeError).Number != ErrQueryIsRunning {
-		// no error means query is complete; error that isnt running means query complete but failed
+	// query is complete and has succeeded
+	if err == nil {
 		return true
 	}
-	return false
+	// if error = query is still running, its not complete
+	var snowflakeError *SnowflakeError
+	if errors.As(err, &snowflakeError) {
+		if snowflakeError.Number == ErrQueryIsRunning {
+			return false
+		}
+	}
+
+	// else query is complete with an error 
+	return true
 }
 
 // AsyncSubmitter is an interface which allows a query to be submitted
