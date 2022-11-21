@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -561,12 +562,13 @@ func (sc *snowflakeConn) WaitForQueryCompletion(ctx context.Context, qid string)
 		return nil
 	}
 	// if error = query is still running; wait for it to complete
-	switch v := err.(type) {
-	case *SnowflakeError:
-		if v.Number == ErrQueryIsRunning {
+	var snowflakeError *SnowflakeError
+	if errors.As(err, &snowflakeError) {
+		if snowflakeError.Number == ErrQueryIsRunning {
 			return sc.blockOnQueryCompletion(ctx, qid)
 		}
 	}
+
 	// query is complete because of an error; return that error
 	return err
 }
