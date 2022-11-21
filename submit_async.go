@@ -45,11 +45,18 @@ func (sc *snowflakeConn) SubmitAsync(
 	// if the query is not submitted, submit it
 	logger.WithContext(ctx).Infof("Query: %#v, %v", query, args)
 
+	// if there is no snowflakeRestful, we cant do anything on this connection.
+	// when this went through dbSql, we returned driverBadConnection, but in this case we
+	// should return an error with a stack trace that goes to sentry, because this would be bad
+	// and something we would want to know about
 	if sc.rest == nil {
-		return SubmitAsyncResponse{
+		err = &SnowflakeError{
+			Number:   -1,
+			SQLState: "",
+			Message:  "null snowflakeRestful",
 			QueryID:  "",
-			Complete: false,
-		}, driver.ErrBadConn
+		}
+		panic(err)
 	}
 
 	ctx = setResultType(ctx, queryResultType)
@@ -108,7 +115,7 @@ func (sc *snowflakeConn) checkIfComplete(ctx context.Context, qid string) bool {
 		}
 	}
 
-	// else query is complete with an error 
+	// else query is complete with an error
 	return true
 }
 
