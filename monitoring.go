@@ -341,7 +341,7 @@ func badResponse(ctx context.Context, response *execResponse, qid string, retrie
 	retryable := false
 	// retry if query failed but there is no error
 	if (!response.Success) && (err == nil) && (*retries < 3) {
-		*retries += 1
+		*retries++
 		retryable = true
 
 	}
