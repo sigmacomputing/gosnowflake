@@ -272,6 +272,8 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 		logEverything(ctx, qid, response, startTime)
 		_, statusErr := sc.checkQueryStatus(ctx, qid)
 		logger.WithContext(ctx).Errorf("failed queryId: %v, statusErr: %v", qid, statusErr)
+		retryResponse, retryErr := sc.rest.getAsyncOrStatus(WithReportAsyncError(ctx), url, headers, sc.rest.RequestTimeout)
+		logger.WithContext(ctx).Errorf("failed queryId: %v, retryResponseSuccess: %v, retryErr: %v", qid, retryResponse.Success, retryErr)
 	}
 
 	sc.execRespCache.store(resultPath, response)
