@@ -309,9 +309,10 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 	// internally, pulls on FuncGet until we have a result at the result location (queryID)
 	var response *execResponse
 	var err error
+	retries := 0
 
 	startTime := time.Now()
-	for response == nil || isQueryInProgress(response) || badResponse(ctx, response, qid, err) {
+	for response == nil || isQueryInProgress(response) || badResponse(ctx, response, qid, &retries, err) {
 		response, err = sc.rest.getAsyncOrStatus(WithReportAsyncError(ctx), url, headers, sc.rest.RequestTimeout)
 
 		// if the context is canceled, we have to cancel it manually now
@@ -336,15 +337,16 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 }
 
 // we want to retry if the query was not successful, but also did not fail
-func badResponse(ctx context.Context, response *execResponse, qid string, err error) bool {
+func badResponse(ctx context.Context, response *execResponse, qid string, retries *int, err error) bool {
 	retryable := false
-	// retry if query failed but there is no error 
-	if (!response.Success) && (err == nil) {
+	// retry if query failed but there is no error
+	if (!response.Success) && (err == nil) && (*retries < 3) {
+		*retries += 1
 		retryable = true
 
 	}
 	logger.WithContext(ctx).Errorf("should retry queryId: %v, retryable: %v", qid, retryable)
-	return retryable 
+	return retryable
 
 }
 
