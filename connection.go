@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/url"
 	"os"
