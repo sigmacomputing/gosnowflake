@@ -196,6 +196,7 @@ func isDml(v int64) bool {
 
 func updateRows(data execResponseData) (int64, error) {
 	var count int64
+	logger.Errorf("cache debugging: update rows for queryId = %v", data.QueryID)
 	for i, n := 0, len(data.RowType); i < n; i++ {
 		v, err := strconv.ParseInt(*data.RowSet[0][i], 10, 64)
 		if err != nil {
