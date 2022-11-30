@@ -202,12 +202,19 @@ func (sc *snowflakeConn) getQueryResultResp(
 	var cachedResponse *execResponse
 	cachedResponse = nil
 	if respd, ok := sc.execRespCache.load(resultPath); ok {
+		if respd == nil {
+			logger.Errorf("cache debugging: null response cached")
+		} else {
+			logger.Errorf("cache debugging: cache hit for queryId = %v", respd.Data.QueryID)
+		}
 		cachedResponse = respd
 		// return the cached response, unless we pass the flag saying to
 		// bypass the cache
 		if !shouldSkipCache(ctx) {
 			return respd, nil
 		}
+	} else {
+		logger.Errorf("cache debugging: no cache hit")
 	}
 
 	headers := getHeaders()
