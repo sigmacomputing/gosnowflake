@@ -420,6 +420,22 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 		}
 		return err
 	}
+	// the result response sometimes contains only Data and not anything else. We parse the error code only
+	// if it's set in the response
+	if !resp.Success && resp.Code != "" {
+		message := resp.Message
+		code, err := strconv.Atoi(resp.Code)
+		if err != nil {
+			code = ErrQueryStatus
+			message = fmt.Sprintf("%s: (failed to parse original code: %s: %s)", message, resp.Code, err.Error())
+		}
+		return (&SnowflakeError{
+			Number:   code,
+			SQLState: resp.Data.SQLState,
+			Message:  message,
+			QueryID:  resp.Data.QueryID,
+		}).exceptionTelemetry(sc)
+	}
 	rows.addDownloader(populateChunkDownloader(ctx, sc, resp.Data))
 	return nil
 }
