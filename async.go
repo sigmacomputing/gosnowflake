@@ -143,8 +143,17 @@ func (sr *snowflakeRestful) getAsync(
 			rows.errChannel <- nil // mark query status complete
 		}
 	} else {
+		var code int
+		if response.Code != "" {
+			code, err = strconv.Atoi(response.Code)
+			if err != nil {
+				code = -1
+			}
+		} else {
+			code = -1
+		}
 		errChannel <- &SnowflakeError{
-			Number:   parseCode(response.Code),
+			Number:   code,
 			SQLState: response.Data.SQLState,
 			Message:  response.Message,
 			QueryID:  response.Data.QueryID,
