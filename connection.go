@@ -133,7 +133,7 @@ func (sc *snowflakeConn) exec(
 		}
 	}
 	logger.WithContext(ctx).Infof("Success: %v, Code: %v", data.Success, code)
-	if !data.Success {
+	if !data.Success && data.Code != "" {
 		return nil, (populateErrorFields(code, data)).exceptionTelemetry(sc)
 	}
 
