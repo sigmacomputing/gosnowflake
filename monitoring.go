@@ -408,7 +408,9 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 		logger.WithContext(ctx).Errorf("error: %v", err)
 		return err
 	}
-	if !resp.Success {
+	// the result response sometimes contains only Data and not anything else. We parse the error code only
+	// if it's set in the response
+	if !resp.Success && resp.Code != "" {
 		message := resp.Message
 		code, err := strconv.Atoi(resp.Code)
 		if err != nil {
