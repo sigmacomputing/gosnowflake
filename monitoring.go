@@ -256,6 +256,11 @@ func (sc *snowflakeConn) getQueryResultResp(
 		return nil, err
 	}
 
+	// log when Success is false but body has data
+	if !respd.Success && respd.Code == "" && respd.Message == "" {
+		logger.WithContext(ctx).Errorf("Response body is non-empty but isSuccess is false")
+	}
+
 	// log to get data points for sf to debug cache issue, should log only for staging org
 	if shouldLogSfResponseForCacheBug(ctx) {
 		logHeader, errHeader := json.Marshal(res.Header)
