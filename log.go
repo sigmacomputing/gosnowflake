@@ -24,6 +24,8 @@ var LogKeys = [...]contextKey{SFSessionIDKey, SFSessionUserKey}
 
 var clientLogContextHooks = map[string]ClientLogContextHook{}
 
+// ClientLogContextHook is a client-defined hook that can be used to insert log
+// fields based on the Context.
 type ClientLogContextHook func(context.Context) interface{}
 
 // RegisterClientLogContextHook registers a hook that can be used to extract fields
