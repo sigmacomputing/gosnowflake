@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+
 func isAsyncModeNoFetch(ctx context.Context) bool {
 	if flag, ok := ctx.Value(asyncModeNoFetch).(bool); ok && flag {
 		return true
