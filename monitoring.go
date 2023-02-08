@@ -139,7 +139,23 @@ func (sc *snowflakeConn) checkQueryStatus(
 	*retStatus, error) {
 	var statusResp statusResponse
 
-	res, err := sc.getMonitoringResult(ctx, "queries", qid, &statusResp)
+	r, err := sc.getMonitoringResult(ctx, "queries", qid, &statusResp)
+	if err != nil {
+		logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
+		return nil, err
+	}
+	_ = r.Body.Close()
+
+	headers := make(map[string]string)
+	param := make(url.Values)
+	param.Add(requestGUIDKey, NewUUID().String())
+	if tok, _, _ := sc.rest.TokenAccessor.GetTokens(); tok != "" {
+		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, tok)
+	}
+	resultPath := fmt.Sprintf("/monitoring/queries/%s", qid)
+	url := sc.rest.getFullURL(resultPath, &param)
+
+	res, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
 	if err != nil {
 		logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
 		return nil, err
@@ -149,7 +165,6 @@ func (sc *snowflakeConn) checkQueryStatus(
 		logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
 		return nil, err
 	}
-
 	if !statusResp.Success || len(statusResp.Data.Queries) == 0 {
 		logger.WithContext(ctx).Errorf("status query returned not-success or no status returned.")
 		return nil, (&SnowflakeError{
@@ -625,7 +640,7 @@ func (sc *snowflakeConn) getMonitoringResult(ctx context.Context, endpoint, qid 
 	param := make(url.Values)
 	param.Add(requestGUIDKey, NewUUID().String())
 	if sc.rest == nil || sc.rest.TokenAccessor == nil {
-		return xerrors.Errorf("missing token accessor when getting monitoring data")
+		return nil, xerrors.Errorf("missing token accessor when getting monitoring data")
 	}
 
 	if tok, _, _ := sc.rest.TokenAccessor.GetTokens(); tok != "" {
