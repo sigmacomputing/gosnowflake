@@ -143,8 +143,22 @@ func (sc *snowflakeConn) checkQueryStatus(
 		logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
 		return nil, err
 	}
+
+	headers := make(map[string]string)
+	param := make(url.Values)
+	param.Add(requestGUIDKey, NewUUID().String())
+	if tok, _, _ := sc.rest.TokenAccessor.GetTokens(); tok != "" {
+		headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, tok)
+	}
+	resultPath := fmt.Sprintf("/monitoring/queries/%s", qid)
+	url := sc.rest.getFullURL(resultPath, &param)
+
+	res, err := sc.rest.FuncGet(ctx, sc.rest, url, headers, sc.rest.RequestTimeout)
+	if err != nil {
+		logger.WithContext(ctx).Errorf("failed to get response. err: %v", err)
+		return nil, err
+	}
 	defer res.Body.Close()
-	var statusResp = statusResponse{}
 	if err = json.NewDecoder(res.Body).Decode(&statusResp); err != nil {
 		logger.WithContext(ctx).Errorf("failed to decode JSON. err: %v", err)
 		return nil, err

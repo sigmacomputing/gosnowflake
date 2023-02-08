@@ -171,8 +171,8 @@ github.com/pkg/browser
 # github.com/sirupsen/logrus v1.9.0
 ## explicit; go 1.13
 github.com/sirupsen/logrus
-# github.com/snowflakedb/gosnowflake v1.6.13
-## explicit; go 1.17
+# github.com/snowflakedb/gosnowflake v1.6.17
+## explicit; go 1.18
 github.com/snowflakedb/gosnowflake
 # golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be
 ## explicit; go 1.17
@@ -203,7 +203,3 @@ golang.org/x/text/unicode/norm
 ## explicit; go 1.17
 golang.org/x/xerrors
 golang.org/x/xerrors/internal
-# gopkg.in/yaml.v2 v2.4.0
-## explicit; go 1.15
-# gopkg.in/yaml.v3 v3.0.1
-## explicit
