@@ -1,6 +1,6 @@
 module github.com/sigmacomputing/gosnowflake
 
-go 1.18
+go 1.17
 
 require (
 	github.com/99designs/keyring v1.2.1
