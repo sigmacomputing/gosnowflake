@@ -340,7 +340,9 @@ func (sc *snowflakeConn) getQueryResultResp(
 		}
 	}
 
-	sc.execRespCache.store(resultPath, respd)
+	if respd.Success {
+		sc.execRespCache.store(resultPath, respd)
+	}
 	return respd, nil
 }
 
