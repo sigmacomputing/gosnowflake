@@ -393,11 +393,12 @@ func (sc *snowflakeConn) waitForCompletedQueryResultResp(
 		}
 	}
 
-	if !response.Success {
+	if response.Success {
+		sc.execRespCache.store(resultPath, response)
+	} else {
 		logEverything(ctx, qid, response, startTime)
 	}
 
-	sc.execRespCache.store(resultPath, response)
 	return response, nil
 }
 
