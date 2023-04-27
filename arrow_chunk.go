@@ -10,10 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/arrow/go/arrow"
-	"github.com/apache/arrow/go/arrow/array"
-	"github.com/apache/arrow/go/arrow/ipc"
-	"github.com/apache/arrow/go/arrow/memory"
+	"github.com/apache/arrow/go/v11/arrow"
+	"github.com/apache/arrow/go/v11/arrow/ipc"
+	"github.com/apache/arrow/go/v11/arrow/memory"
 )
 
 type arrowResultChunk struct {
@@ -74,8 +73,8 @@ func (arc *arrowResultChunk) decodeArrowBatch(scd *snowflakeChunkDownloader) (*[
 // Note(Qing): Previously, the gosnowflake driver decodes the raw arrow chunks fetched from snowflake by
 // calling the decodeArrowBatch() function above. Instead of decoding here, we directly pass the raw records
 // to evaluator, along with neccesary metadata needed.
-func (arc *arrowResultChunk) passRawArrowBatch(scd *snowflakeChunkDownloader) (*[]array.Record, error) {
-	var records []array.Record
+func (arc *arrowResultChunk) passRawArrowBatch(scd *snowflakeChunkDownloader) (*[]arrow.Record, error) {
+	var records []arrow.Record
 
 	for {
 		rawRecord, err := arc.reader.Read()

@@ -528,7 +528,7 @@ func arrowToValue(
 			for i, t := range srcValue.(*array.Int64).Int64Values() {
 				if !srcValue.IsNull(i) {
 					// Note: sigma rebasers leave the (*destcol)[i] = time.Unix line in 
-					(*destcol)[i] = time.Unix(0, t*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).In(loc)
+					(destcol)[i] = time.Unix(0, t*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).In(loc)
 				}
 			}
 		}

@@ -743,7 +743,7 @@ type ArrowBatch struct {
 }
 
 // Fetch returns an array of records representing a chunk in the query
-func (rb *ArrowBatch) Fetch(ctx context.Context) (*[]array.Record, error) {
+func (rb *ArrowBatch) Fetch(ctx context.Context) (*[]arrow.Record, error) {
 	// chunk has already been downloaded
 	if rb.rec != nil {
 		// updating metadata
