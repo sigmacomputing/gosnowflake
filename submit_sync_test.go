@@ -10,6 +10,11 @@ import (
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/apache/arrow/go/v10/arrow"
+	"github.com/apache/arrow/go/v10/arrow/array"
+	"github.com/apache/arrow/go/v10/arrow/ipc"
+	"github.com/apache/arrow/go/v11/arrow/memory"
 )
 
 func TestSubmitQuerySync(t *testing.T) {
