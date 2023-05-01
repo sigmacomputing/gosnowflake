@@ -7,14 +7,12 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -68,15 +66,6 @@ type snowflakeChunkDownloader struct {
 	FuncDownload       func(context.Context, *snowflakeChunkDownloader, int)
 	FuncDownloadHelper func(context.Context, *snowflakeChunkDownloader, int) error
 	FuncGet            func(context.Context, *snowflakeConn, string, map[string]string, time.Duration) (*http.Response, error)
-}
-
-type wrappedPanic struct {
-	stackTrace string
-	err        error
-}
-
-func (w *wrappedPanic) Error() string {
-	return fmt.Sprintf("Panic within GoSnowflake: %v\nStack-trace:\n %s", w.err, w.stackTrace)
 }
 
 func (scd *snowflakeChunkDownloader) totalUncompressedSize() (acc int64) {
@@ -293,7 +282,7 @@ func (scd *snowflakeChunkDownloader) startArrowBatches() error {
 	}
 	// decode first chunk if possible
 	if firstArrowChunk.allocator != nil {
-		scd.FirstBatch.rec, err = firstArrowChunk.passRawArrowBatch(scd)
+		scd.FirstBatch.rec, err = firstArrowChunk.decodeArrowBatch(scd)
 		if err != nil {
 			return err
 		}
@@ -346,28 +335,6 @@ func downloadChunk(ctx context.Context, scd *snowflakeChunkDownloader, idx int) 
 	logger.Infof("download start chunk: %v", idx+1)
 	defer scd.DoneDownloadCond.Broadcast()
 
-	defer func() {
-		var ret *wrappedPanic
-		if err := recover(); err != nil {
-			logger.Infof("GoSnowflake chunk-downloader trapping error: %v", err)
-			stackTrace := make([]byte, 2048)
-			runtime.Stack(stackTrace, false)
-			// TODO(agam): properly format the stack-trace-payload
-			switch errResolved := err.(type) {
-			case string:
-				ret = &wrappedPanic{
-					err:        errors.New(errResolved),
-					stackTrace: string(stackTrace),
-				}
-			case error:
-				ret = &wrappedPanic{err: errResolved, stackTrace: string(stackTrace)}
-			default:
-				ret = &wrappedPanic{err: errors.New("Panic within GoSnowflake"), stackTrace: string(stackTrace)}
-			}
-			// Pass this through our error-channel
-			scd.ChunksError <- &chunkError{Index: idx, Error: ret}
-		}
-	}()
 	if err := scd.FuncDownloadHelper(ctx, scd, idx); err != nil {
 		logger.Errorf(
 			"failed to extract HTTP response body. URL: %v, err: %v", scd.ChunkMetas[idx].URL, err)
@@ -473,7 +440,7 @@ func decodeChunk(scd *snowflakeChunkDownloader, idx int, bufStream *bufio.Reader
 			scd.pool,
 		}
 		if usesArrowBatches(scd.ctx) {
-			if scd.ArrowBatches[idx].rec, err = arc.passRawArrowBatch(scd); err != nil {
+			if scd.ArrowBatches[idx].rec, err = arc.decodeArrowBatch(scd); err != nil {
 				return err
 			}
 			// updating metadata
@@ -543,7 +510,7 @@ func (scd *streamChunkDownloader) start() error {
 			if readErr == io.EOF {
 				logger.WithContext(scd.ctx).Infof("downloading done. downloader id: %v", scd.id)
 			} else {
-				logger.WithContext(scd.ctx).Infof("downloading error. downloader id: %v, err: %v", scd.id, readErr)
+				logger.WithContext(scd.ctx).Debugf("downloading error. downloader id: %v", scd.id)
 			}
 			scd.readErr = readErr
 			close(scd.rowStream)
@@ -743,14 +710,14 @@ type ArrowBatch struct {
 }
 
 // Fetch returns an array of records representing a chunk in the query
-func (rb *ArrowBatch) Fetch(ctx context.Context) (*[]arrow.Record, error) {
+func (rb *ArrowBatch) Fetch() (*[]arrow.Record, error) {
 	// chunk has already been downloaded
 	if rb.rec != nil {
 		// updating metadata
 		rb.rowCount = countArrowBatchRows(rb.rec)
 		return rb.rec, nil
 	}
-	if err := rb.funcDownloadHelper(ctx, rb.scd, rb.idx); err != nil {
+	if err := rb.funcDownloadHelper(context.Background(), rb.scd, rb.idx); err != nil {
 		return nil, err
 	}
 	return rb.rec, nil
