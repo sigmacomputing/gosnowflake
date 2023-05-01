@@ -36,6 +36,15 @@ type SnowflakeRows interface {
 	GetArrowBatches() ([]*ArrowBatch, error)
 }
 
+type wrappedPanic struct {
+	stackTrace string
+	err        error
+}
+
+func (w *wrappedPanic) Error() string {
+	return fmt.Sprintf("Panic within GoSnowflake: %v\nStack-trace:\n %s", w.err, w.stackTrace)
+}
+
 type snowflakeRows struct {
 	sc                  *snowflakeConn
 	ChunkDownloader     chunkDownloader
