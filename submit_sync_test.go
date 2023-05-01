@@ -10,11 +10,6 @@ import (
 	"net/url"
 	"testing"
 	"time"
-
-	"github.com/apache/arrow/go/arrow"
-	"github.com/apache/arrow/go/arrow/array"
-	"github.com/apache/arrow/go/arrow/ipc"
-	"github.com/apache/arrow/go/arrow/memory"
 )
 
 func TestSubmitQuerySync(t *testing.T) {
@@ -151,7 +146,7 @@ func TestSubmitQuerySyncQueryComplete(t *testing.T) {
 		t.Fatalf("Expected one batch, got %d", len(batches))
 	}
 
-	recs, err := batches[0].Fetch(context.TODO())
+	recs, err := batches[0].Fetch()
 	if err != nil {
 		t.Fatal(err)
 	}
