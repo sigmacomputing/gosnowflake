@@ -151,7 +151,7 @@ func valueToString(v driver.Value, dataType SnowflakeDataType) (*string, error) 
 		s := v1.String()
 		return &s, nil
 	case reflect.Struct:
-		if tm, ok := v.(time.Time); ok && dataType != nil {
+		if tm, ok := v.(time.Time); ok {
 			switch {
 			case dataType.Equals(DataTypeDate):
 				_, offset := tm.Zone()
@@ -162,7 +162,10 @@ func valueToString(v driver.Value, dataType SnowflakeDataType) (*string, error) 
 				s := fmt.Sprintf("%d",
 					(tm.Hour()*3600+tm.Minute()*60+tm.Second())*1e9+tm.Nanosecond())
 				return &s, nil
-			case dataType.Equals(DataTypeTimestampNtz) || dataType.Equals(DataTypeTimestampLtz):
+			case dataType.Equals(DataTypeTimestampNtz) || dataType.Equals(DataTypeTimestampLtz) || dataType == nil:
+				// NOTE(greg): when the client has not given us an explicit dataType
+				// (dataType == nil), we assume DataTypeTimestampNtz for compatibility
+				// with the upstream driver
 				s := fmt.Sprintf("%d", tm.UnixNano())
 				return &s, nil
 			case dataType.Equals(DataTypeTimestampTz):
