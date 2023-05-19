@@ -11,12 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
+	"os" //
 	"runtime"
 	"testing"
 	"time"
-
-	"github.com/form3tech-oss/jwt-go"
 )
 
 func TestUnitPostAuth(t *testing.T) {
