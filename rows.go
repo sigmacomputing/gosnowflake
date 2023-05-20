@@ -191,6 +191,10 @@ func (rows *snowflakeRows) GetArrowBatches() ([]*ArrowBatch, error) {
 	return rows.ChunkDownloader.getArrowBatches(), nil
 }
 
+func (rows *snowflakeRows) GetChunkMetas() ([]execResponseChunk, error) {
+	return rows.ChunkDownloader.getChunkMetas(), nil
+}
+
 func (rows *snowflakeRows) Next(dest []driver.Value) (err error) {
 	if err = rows.waitForAsyncQueryStatus(); err != nil {
 		return err
