@@ -40,7 +40,6 @@ type snowflakeResult struct {
 type monitoringResult struct {
 	monitoringChan <-chan *QueryMonitoringData
 	queryGraphChan <-chan *QueryGraphData
-	// chunkMetas []execResponseChunk
 
 	monitoring *QueryMonitoringData
 	queryGraph *QueryGraphData
