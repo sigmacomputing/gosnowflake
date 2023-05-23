@@ -39,6 +39,15 @@ type execResponseRowType struct {
 	Nullable   bool   `json:"nullable"`
 }
 
+// yifeng: we want to make rebase easier
+// so create a new struct for export rather than change the original one
+type ExecResponseChunk struct {
+	URL              string `json:"url"`
+	RowCount         int    `json:"rowCount"`
+	UncompressedSize int64  `json:"uncompressedSize"`
+	CompressedSize   int64  `json:"compressedSize"`
+}
+
 type execResponseChunk struct {
 	URL              string `json:"url"`
 	RowCount         int    `json:"rowCount"`

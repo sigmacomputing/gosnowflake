@@ -27,7 +27,7 @@ type SnowflakeResult interface {
 }
 
 type SnowflakeChunkResult interface {
-	GetChunkMetas() []execResponseChunk
+	GetChunkMetas() []ExecResponseChunk
 }
 
 type snowflakeResult struct {
