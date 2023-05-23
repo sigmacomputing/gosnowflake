@@ -186,7 +186,9 @@ func (rows *snowflakeRows) GetChunkMetas() []ExecResponseChunk {
 	execResponseChunkPrivate := rows.ChunkDownloader.getChunkMetas()
 	execResponseChunkExport := make([]ExecResponseChunk, len(execResponseChunkPrivate))
 	for i := 0; i < len(execResponseChunkPrivate); i++ {
-		execResponseChunkExport[i] = ExecResponseChunk(execResponseChunkPrivate[i])
+		execResponseChunkExport[i] = ExecResponseChunk{
+			execResponseChunkPrivate[i],
+		}
 	}
 	return execResponseChunkExport
 }
