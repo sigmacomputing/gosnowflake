@@ -31,7 +31,7 @@ type chunkDownloader interface {
 	start() error
 	next() (chunkRowType, error)
 	reset()
-	getChunkMetas() []execResponseChunk
+	getChunkMetas() []ExecResponseChunk
 	getQueryResultFormat() resultFormat
 	getRowType() []execResponseRowType
 	setNextChunkDownloader(downloader chunkDownloader)
@@ -50,7 +50,7 @@ type snowflakeChunkDownloader struct {
 	CurrentChunkSize   int
 	CurrentIndex       int
 	ChunkHeader        map[string]string
-	ChunkMetas         []execResponseChunk
+	ChunkMetas         []ExecResponseChunk
 	Chunks             map[int][]chunkRowType
 	ChunksChan         chan int
 	ChunksError        chan *chunkError
@@ -233,7 +233,7 @@ func (scd *snowflakeChunkDownloader) reset() {
 	scd.Chunks = nil // detach all chunks. No way to go backward without reinitialize it.
 }
 
-func (scd *snowflakeChunkDownloader) getChunkMetas() []execResponseChunk {
+func (scd *snowflakeChunkDownloader) getChunkMetas() []ExecResponseChunk {
 	return scd.ChunkMetas
 }
 
@@ -510,7 +510,7 @@ type streamChunkDownloader struct {
 	readErr        error
 	rowStream      chan []*string
 	Total          int64
-	ChunkMetas     []execResponseChunk
+	ChunkMetas     []ExecResponseChunk
 	NextDownloader chunkDownloader
 	RowSet         rowSetType
 }
@@ -589,7 +589,7 @@ func (scd *streamChunkDownloader) next() (chunkRowType, error) {
 
 func (scd *streamChunkDownloader) reset() {}
 
-func (scd *streamChunkDownloader) getChunkMetas() []execResponseChunk {
+func (scd *streamChunkDownloader) getChunkMetas() []ExecResponseChunk {
 	return scd.ChunkMetas
 }
 
@@ -640,7 +640,7 @@ func newStreamChunkDownloader(
 	total int64,
 	rowType []execResponseRowType,
 	firstRows [][]*string,
-	chunks []execResponseChunk) *streamChunkDownloader {
+	chunks []ExecResponseChunk) *streamChunkDownloader {
 	return &streamChunkDownloader{
 		ctx:        ctx,
 		id:         rand.Int63(),

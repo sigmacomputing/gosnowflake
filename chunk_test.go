@@ -191,7 +191,7 @@ func TestStreamChunkDownloaderFirstRows(t *testing.T) {
 		int64(len(firstRows)),
 		[]execResponseRowType{},
 		firstRows,
-		[]execResponseChunk{})
+		[]ExecResponseChunk{})
 	if err := downloader.start(); err != nil {
 		t.Fatalf("chunk download start failed. err: %v", err)
 	}
@@ -315,13 +315,13 @@ func TestCopyChunkStreamInvalid(t *testing.T) {
 	}
 }
 
-func generateStreamChunkDownloaderChunks(urls []string, numRows, numCols int) (map[string][][]*string, []execResponseChunk) {
+func generateStreamChunkDownloaderChunks(urls []string, numRows, numCols int) (map[string][][]*string, []ExecResponseChunk) {
 	chunks := map[string][][]*string{}
-	var responseChunks []execResponseChunk
+	var responseChunks []ExecResponseChunk
 	for _, url := range urls {
 		rows := generateStreamChunkRows(numRows, numCols)
 		chunks[url] = rows
-		responseChunks = append(responseChunks, execResponseChunk{url, len(rows), -1, -1})
+		responseChunks = append(responseChunks, ExecResponseChunk{url, len(rows), -1, -1})
 	}
 	return chunks, responseChunks
 }
