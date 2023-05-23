@@ -31,7 +31,7 @@ type chunkDownloader interface {
 	start() error
 	next() (chunkRowType, error)
 	reset()
-	getChunkMetas() []ExecResponseChunk
+	getChunkMetas() []execResponseChunk
 	getQueryResultFormat() resultFormat
 	getRowType() []execResponseRowType
 	setNextChunkDownloader(downloader chunkDownloader)
@@ -50,7 +50,7 @@ type snowflakeChunkDownloader struct {
 	CurrentChunkSize   int
 	CurrentIndex       int
 	ChunkHeader        map[string]string
-	ChunkMetas         []ExecResponseChunk
+	ChunkMetas         []execResponseChunk
 	Chunks             map[int][]chunkRowType
 	ChunksChan         chan int
 	ChunksError        chan *chunkError
@@ -139,7 +139,7 @@ func (scd *snowflakeChunkDownloader) start() error {
 		scd.ChunksChan = make(chan int, chunkMetaLen)
 		scd.ChunksError = make(chan *chunkError, MaxChunkDownloadWorkers)
 		for i := 0; i < chunkMetaLen; i++ {
-			chunk := scd.ChunkMetas[i]
+			var chunk = scd.ChunkMetas[i]
 			logger.WithContext(scd.ctx).Infof("add chunk to channel ChunksChan: %v, URL: %v, RowCount: %v, UncompressedSize: %v, ChunkResultFormat: %v",
 				i+1, chunk.URL, chunk.RowCount, chunk.UncompressedSize, scd.QueryResultFormat)
 			scd.ChunksChan <- i
@@ -233,7 +233,7 @@ func (scd *snowflakeChunkDownloader) reset() {
 	scd.Chunks = nil // detach all chunks. No way to go backward without reinitialize it.
 }
 
-func (scd *snowflakeChunkDownloader) getChunkMetas() []ExecResponseChunk {
+func (scd *snowflakeChunkDownloader) getChunkMetas() []execResponseChunk {
 	return scd.ChunkMetas
 }
 
@@ -510,7 +510,7 @@ type streamChunkDownloader struct {
 	readErr        error
 	rowStream      chan []*string
 	Total          int64
-	ChunkMetas     []ExecResponseChunk
+	ChunkMetas     []execResponseChunk
 	NextDownloader chunkDownloader
 	RowSet         rowSetType
 }
@@ -589,7 +589,7 @@ func (scd *streamChunkDownloader) next() (chunkRowType, error) {
 
 func (scd *streamChunkDownloader) reset() {}
 
-func (scd *streamChunkDownloader) getChunkMetas() []ExecResponseChunk {
+func (scd *streamChunkDownloader) getChunkMetas() []execResponseChunk {
 	return scd.ChunkMetas
 }
 
@@ -640,7 +640,7 @@ func newStreamChunkDownloader(
 	total int64,
 	rowType []execResponseRowType,
 	firstRows [][]*string,
-	chunks []ExecResponseChunk) *streamChunkDownloader {
+	chunks []execResponseChunk) *streamChunkDownloader {
 	return &streamChunkDownloader{
 		ctx:        ctx,
 		id:         rand.Int63(),

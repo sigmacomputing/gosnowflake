@@ -102,7 +102,7 @@ func TestRowsWithoutChunkDownloader(t *testing.T) {
 		{Name: "c1", ByteLength: 10, Length: 10, Type: "FIXED", Scale: 0, Nullable: true},
 		{Name: "c2", ByteLength: 100000, Length: 100000, Type: "TEXT", Scale: 0, Nullable: false},
 	}
-	cm := []ExecResponseChunk{}
+	cm := []execResponseChunk{}
 	rows := new(snowflakeRows)
 	rows.sc = nil
 	rows.ChunkDownloader = &snowflakeChunkDownloader{
@@ -168,9 +168,9 @@ func TestRowsWithChunkDownloader(t *testing.T) {
 		{Name: "c1", ByteLength: 10, Length: 10, Type: "FIXED", Scale: 0, Nullable: true},
 		{Name: "c2", ByteLength: 100000, Length: 100000, Type: "TEXT", Scale: 0, Nullable: false},
 	}
-	cm := make([]ExecResponseChunk, 0)
+	cm := make([]execResponseChunk, 0)
 	for i = 0; i < numChunks; i++ {
-		cm = append(cm, ExecResponseChunk{URL: fmt.Sprintf("dummyURL%v", i+1), RowCount: rowsInChunk})
+		cm = append(cm, execResponseChunk{URL: fmt.Sprintf("dummyURL%v", i+1), RowCount: rowsInChunk})
 	}
 	rows := new(snowflakeRows)
 	rows.sc = nil
@@ -247,9 +247,9 @@ func TestRowsWithChunkDownloaderError(t *testing.T) {
 		{Name: "c1", ByteLength: 10, Length: 10, Type: "FIXED", Scale: 0, Nullable: true},
 		{Name: "c2", ByteLength: 100000, Length: 100000, Type: "TEXT", Scale: 0, Nullable: false},
 	}
-	cm := make([]ExecResponseChunk, 0)
+	cm := make([]execResponseChunk, 0)
 	for i = 0; i < numChunks; i++ {
-		cm = append(cm, ExecResponseChunk{URL: fmt.Sprintf("dummyURL%v", i+1), RowCount: rowsInChunk})
+		cm = append(cm, execResponseChunk{URL: fmt.Sprintf("dummyURL%v", i+1), RowCount: rowsInChunk})
 	}
 	rows := new(snowflakeRows)
 	rows.sc = nil
@@ -325,9 +325,9 @@ func TestRowsWithChunkDownloaderErrorFail(t *testing.T) {
 		{Name: "c1", ByteLength: 10, Length: 10, Type: "FIXED", Scale: 0, Nullable: true},
 		{Name: "c2", ByteLength: 100000, Length: 100000, Type: "TEXT", Scale: 0, Nullable: false},
 	}
-	cm := make([]ExecResponseChunk, 0)
+	cm := make([]execResponseChunk, 0)
 	for i = 0; i < numChunks; i++ {
-		cm = append(cm, ExecResponseChunk{URL: fmt.Sprintf("dummyURL%v", i+1), RowCount: rowsInChunk})
+		cm = append(cm, execResponseChunk{URL: fmt.Sprintf("dummyURL%v", i+1), RowCount: rowsInChunk})
 	}
 	rows := new(snowflakeRows)
 	rows.sc = nil
@@ -369,9 +369,9 @@ func getChunkTestInvalidResponseBody(_ context.Context, _ *snowflakeChunkDownloa
 
 func TestDownloadChunkInvalidResponseBody(t *testing.T) {
 	numChunks := 2
-	cm := make([]ExecResponseChunk, 0)
+	cm := make([]execResponseChunk, 0)
 	for i := 0; i < numChunks; i++ {
-		cm = append(cm, ExecResponseChunk{URL: fmt.Sprintf(
+		cm = append(cm, execResponseChunk{URL: fmt.Sprintf(
 			"dummyURL%v", i+1), RowCount: rowsInChunk})
 	}
 	scd := &snowflakeChunkDownloader{
@@ -411,9 +411,9 @@ func getChunkTestErrorStatus(_ context.Context, _ *snowflakeChunkDownloader, _ s
 
 func TestDownloadChunkErrorStatus(t *testing.T) {
 	numChunks := 2
-	cm := make([]ExecResponseChunk, 0)
+	cm := make([]execResponseChunk, 0)
 	for i := 0; i < numChunks; i++ {
-		cm = append(cm, ExecResponseChunk{URL: fmt.Sprintf(
+		cm = append(cm, execResponseChunk{URL: fmt.Sprintf(
 			"dummyURL%v", i+1), RowCount: rowsInChunk})
 	}
 	scd := &snowflakeChunkDownloader{

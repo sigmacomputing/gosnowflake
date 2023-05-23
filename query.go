@@ -39,7 +39,7 @@ type execResponseRowType struct {
 	Nullable   bool   `json:"nullable"`
 }
 
-type ExecResponseChunk struct {
+type execResponseChunk struct {
 	URL              string `json:"url"`
 	RowCount         int    `json:"rowCount"`
 	UncompressedSize int64  `json:"uncompressedSize"`
@@ -87,7 +87,7 @@ type execResponseData struct {
 	NumberOfBinds      int                   `json:"numberOfBinds,omitempty"`   // java:int
 	StatementTypeID    int64                 `json:"statementTypeId,omitempty"` // java:long
 	Version            int64                 `json:"version,omitempty"`         // java:long
-	Chunks             []ExecResponseChunk   `json:"chunks,omitempty"`
+	Chunks             []execResponseChunk   `json:"chunks,omitempty"`
 	Qrmk               string                `json:"qrmk,omitempty"`
 	ChunkHeaders       map[string]string     `json:"chunkHeaders,omitempty"`
 
