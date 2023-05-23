@@ -182,8 +182,8 @@ func (rows *snowflakeRows) GetArrowBatches() ([]*ArrowBatch, error) {
 	return rows.ChunkDownloader.getArrowBatches(), nil
 }
 
-func (rows *snowflakeRows) GetChunkMetas() ([]execResponseChunk, error) {
-	return rows.ChunkDownloader.getChunkMetas(), nil
+func (rows *snowflakeRows) GetChunkMetas() []execResponseChunk {
+	return rows.ChunkDownloader.getChunkMetas()
 }
 
 func (rows *snowflakeRows) Next(dest []driver.Value) (err error) {

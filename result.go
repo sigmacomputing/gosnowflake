@@ -22,9 +22,12 @@ type SnowflakeResult interface {
 	GetQueryID() string
 	GetStatus() queryStatus
 	GetArrowBatches() ([]*ArrowBatch, error)
-	GetChunkMetas() ([]execResponseChunk, error)
 	Monitoring(time.Duration) *QueryMonitoringData
 	QueryGraph(time.Duration) *QueryGraphData
+}
+
+type SnowflakeChunkResult interface {
+	GetChunkMetas() []execResponseChunk
 }
 
 type snowflakeResult struct {
@@ -96,10 +99,6 @@ func (res *snowflakeResult) Monitoring(wait time.Duration) *QueryMonitoringData 
 func (res *snowflakeResult) QueryGraph(wait time.Duration) *QueryGraphData {
 	return res.monitoring.QueryGraph(wait)
 }
-func (rows *snowflakeResult) GetChunkMetas() ([]execResponseChunk, error) {
-	return nil, nil
-}
-
 func (m *monitoringResult) Monitoring(wait time.Duration) *QueryMonitoringData {
 	if m == nil {
 		return nil
