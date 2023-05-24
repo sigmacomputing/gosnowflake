@@ -39,7 +39,7 @@ type execResponseRowType struct {
 	Nullable   bool   `json:"nullable"`
 }
 
-// yifeng: we want to make rebase easier
+// yifeng: we want to make rebase origin/master easier
 // so create a new struct for export rather than change the original one
 type ExecResponseChunk struct {
 	execResponseChunk

@@ -99,6 +99,7 @@ func (res *snowflakeResult) Monitoring(wait time.Duration) *QueryMonitoringData 
 func (res *snowflakeResult) QueryGraph(wait time.Duration) *QueryGraphData {
 	return res.monitoring.QueryGraph(wait)
 }
+
 func (m *monitoringResult) Monitoring(wait time.Duration) *QueryMonitoringData {
 	if m == nil {
 		return nil
