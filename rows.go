@@ -187,7 +187,9 @@ func (rows *snowflakeRows) GetChunkMetas() []ExecResponseChunk {
 	execResponseChunkExport := make([]ExecResponseChunk, len(execResponseChunkPrivate))
 	for i := 0; i < len(execResponseChunkPrivate); i++ {
 		execResponseChunkExport[i] = ExecResponseChunk{
-			execResponseChunkPrivate[i],
+			RowCount:         execResponseChunkPrivate[i].RowCount,
+			UncompressedSize: execResponseChunkPrivate[i].UncompressedSize,
+			CompressedSize:   execResponseChunkPrivate[i].CompressedSize,
 		}
 	}
 	return execResponseChunkExport
