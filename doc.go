@@ -247,16 +247,16 @@ data types. The columns are:
 
  1. The SQL data type.
 
- 2. The default Golang data type that is returned when you use snowflakeRows.Scan() to read data from
+ 2. The default Golang data type that is returned when you use SnowflakeRows.Scan() to read data from
     Arrow data format via an interface{}.
 
- 3. The possible Golang data types that can be returned when you use snowflakeRows.Scan() to read data
+ 3. The possible Golang data types that can be returned when you use SnowflakeRows.Scan() to read data
     from Arrow data format directly.
 
- 4. The default Golang data type that is returned when you use snowflakeRows.Scan() to read data from
+ 4. The default Golang data type that is returned when you use SnowflakeRows.Scan() to read data from
     JSON data format via an interface{}. (All returned values are strings.)
 
- 5. The standard Golang data type that is returned when you use snowflakeRows.Scan() to read data from
+ 5. The standard Golang data type that is returned when you use SnowflakeRows.Scan() to read data from
     JSON data format directly.
 
     Go Data Types for Scan()
@@ -299,7 +299,7 @@ data types. The columns are:
     -------------------------------------------------------------------------------------------------------------------
     VARIANT              | string                                      | string
 
-    [1] Converting from a higher precision data type to a lower precision data type via the snowflakeRows.Scan()
+    [1] Converting from a higher precision data type to a lower precision data type via the SnowflakeRows.Scan()
     method can lose low bits (lose precision), lose high bits (completely change the value), or result in error.
 
     [2] Attempting to convert from a higher precision data type to a lower precision data type via interface{}
@@ -308,10 +308,10 @@ data types. The columns are:
     [3] Higher precision data types like *big.Int and *big.Float can be accessed by querying with a context
     returned by WithHigherPrecision().
 
-    [4] You cannot directly Scan() into the alternative data types via snowflakeRows.Scan(), but can convert to
+    [4] You cannot directly Scan() into the alternative data types via SnowflakeRows.Scan(), but can convert to
     those data types by using .Int64()/.String()/.Uint64() methods. For an example, see below.
 
-    [5] You cannot directly Scan() into the alternative data types via snowflakeRows.Scan(), but can convert to
+    [5] You cannot directly Scan() into the alternative data types via SnowflakeRows.Scan(), but can convert to
     those data types by using .Float32()/.String()/.Float64() methods. For an example, see below.
 
 Note: SQL NULL values are converted to Golang nil values, and vice-versa.
@@ -330,7 +330,7 @@ context that enables higher precision must be passed in with the query.
 	var my_interface interface{}
 	var my_big_int_pointer *big.Int
 	var my_int64 int64
-	var rows snowflakeRows
+	var rows SnowflakeRows
 
 	...
 	rows = db.QueryContext(WithHigherPrecision(context.Background), <query>)
@@ -752,24 +752,24 @@ asynchronous mode and synchronous mode.
 		...
 	}
 
-The function db.QueryContext() returns an object of type snowflakeRows
+The function db.QueryContext() returns an object of type SnowflakeRows
 regardless of whether the query is synchronous or asynchronous. However:
 
   - If the query is synchronous, then db.QueryContext() does not return until
     the query has finished and the result set has been loaded into the
-    snowflakeRows object.
+    SnowflakeRows object.
   - If the query is asynchronous, then db.QueryContext() returns a
-    potentially incomplete snowflakeRows object that is filled in later
+    potentially incomplete SnowflakeRows object that is filled in later
     in the background.
 
-The call to the Next() function of snowflakeRows is always synchronous (i.e. blocking).
-If the query has not yet completed and the snowflakeRows object (named "rows" in this
+The call to the Next() function of SnowflakeRows is always synchronous (i.e. blocking).
+If the query has not yet completed and the SnowflakeRows object (named "rows" in this
 example) has not been filled in yet, then rows.Next() waits until the result set has been filled in.
 
-More generally, calls to any Golang SQL API function implemented in snowflakeRows or
+More generally, calls to any Golang SQL API function implemented in SnowflakeRows or
 snowflakeResult are blocking calls, and wait if results are not yet available.
-(Examples of other synchronous calls include: snowflakeRows.Err(), snowflakeRows.Columns(),
-snowflakeRows.columnTypes(), snowflakeRows.Scan(), and snowflakeResult.RowsAffected().)
+(Examples of other synchronous calls include: SnowflakeRows.Err(), SnowflakeRows.Columns(),
+SnowflakeRows.columnTypes(), SnowflakeRows.Scan(), and snowflakeResult.RowsAffected().)
 
 Because the example code above executes only one query and no other activity, there is
 no significant difference in behavior between asynchronous and synchronous behavior.

@@ -28,7 +28,7 @@ func (sr *snowflakeRestful) processAsync(
 	cfg *Config,
 	requestID UUID) (*execResponse, error) {
 	// placeholder object to return to user while retrieving results
-	rows := new(snowflakeRows)
+	rows := new(SnowflakeRows)
 	res := new(snowflakeResult)
 	switch resType := getResultType(ctx); resType {
 	case execResultType:
@@ -57,7 +57,7 @@ func (sr *snowflakeRestful) getAsync(
 	URL *url.URL,
 	timeout time.Duration,
 	res *snowflakeResult,
-	rows *snowflakeRows,
+	rows *SnowflakeRows,
 	requestID UUID,
 	cfg *Config) error {
 	resType := getResultType(ctx)

@@ -101,7 +101,7 @@ type execResponseData struct {
 
 	// async response placeholders
 	AsyncResult *snowflakeResult `json:"asyncResult,omitempty"`
-	AsyncRows   *snowflakeRows   `json:"asyncRows,omitempty"`
+	AsyncRows   *SnowflakeRows   `json:"asyncRows,omitempty"`
 
 	// file transfer response data
 	UploadInfo              execResponseStageInfo `json:"uploadInfo,omitempty"`

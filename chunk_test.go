@@ -421,7 +421,7 @@ func TestWithArrowBatches(t *testing.T) {
 	defer rows.Close()
 
 	// getting result batches
-	batches, err := rows.(*snowflakeRows).GetArrowBatches()
+	batches, err := rows.(*SnowflakeRows).GetArrowBatches()
 	if err != nil {
 		t.Error(err)
 	}
@@ -503,7 +503,7 @@ func TestWithArrowBatchesAsync(t *testing.T) {
 
 	// getting result batches
 	// this will fail if GetArrowBatches() is not a blocking call
-	batches, err := rows.(*snowflakeRows).GetArrowBatches()
+	batches, err := rows.(*SnowflakeRows).GetArrowBatches()
 	if err != nil {
 		t.Error(err)
 	}

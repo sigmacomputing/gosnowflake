@@ -369,7 +369,7 @@ func (sc *snowflakeConn) queryContextInternal(
 		return data.Data.AsyncRows, nil
 	}
 
-	rows := new(snowflakeRows)
+	rows := new(SnowflakeRows)
 	rows.sc = sc
 	rows.queryID = sc.QueryID
 	rows.monitoring = mkMonitoringFetcher(sc, sc.QueryID, time.Since(qStart))
@@ -868,7 +868,7 @@ func (sc *snowflakeConn) SubmitQuerySync(
 		return nil, err
 	}
 
-	return rows.(*snowflakeRows), nil
+	return rows.(*SnowflakeRows), nil
 }
 
 // TokenGetter is an interface that can be used to get the current tokens and session

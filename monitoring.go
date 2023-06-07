@@ -444,7 +444,7 @@ func logEverything(ctx context.Context, qid string, response *execResponse, star
 // Fetch query result for a query id from /queries/<qid>/result endpoint.
 func (sc *snowflakeConn) rowsForRunningQuery(
 	ctx context.Context, qid string,
-	rows *snowflakeRows) error {
+	rows *SnowflakeRows) error {
 	resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
 	resp, err := sc.getQueryResultResp(ctx, resultPath)
 	if err != nil {
@@ -548,7 +548,7 @@ func (sc *snowflakeConn) buildRowsForRunningQuery(
 	ctx context.Context,
 	qid string) (
 	driver.Rows, error) {
-	rows := new(snowflakeRows)
+	rows := new(SnowflakeRows)
 	rows.sc = sc
 	rows.queryID = qid
 	if err := sc.rowsForRunningQuery(ctx, qid, rows); err != nil {

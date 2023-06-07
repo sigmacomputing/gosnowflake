@@ -98,7 +98,7 @@ func (sc *snowflakeConn) handleMultiExec(
 func (sc *snowflakeConn) handleMultiQuery(
 	ctx context.Context,
 	data execResponseData,
-	rows *snowflakeRows) error {
+	rows *SnowflakeRows) error {
 	if data.ResultIDs == "" {
 		return (&SnowflakeError{
 			Number:   ErrNoResultIDs,
