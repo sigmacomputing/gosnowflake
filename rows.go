@@ -34,6 +34,20 @@ type SnowflakeRows interface {
 	GetQueryID() string
 	GetStatus() queryStatus
 	GetArrowBatches() ([]*ArrowBatch, error)
+	Close() (err error) 
+	ColumnTypeDatabaseTypeName(index int) 
+	ColumnTypeLength(index int) (length int64, ok bool)
+	GetArrowBatches() ([]*ArrowBatch, error) 
+	Monitoring(wait time.Duration) *QueryMonitoringData
+	ColumnTypePrecisionScale(index int) (precision, scale int64, ok bool)
+	Columns() []string
+	ColumnTypeScanType(index int) reflect.Type
+	GetQueryID() string
+	Monitoring(wait time.Duration) *QueryMonitoringData
+	QueryGraph(wait time.Duration) *QueryGraphData
+	Next(dest []driver.Value) (err error)
+	HasNextResultSet() bool 
+	NextResultSet() error 
 }
 
 type snowflakeRows struct {
@@ -288,4 +302,21 @@ func (rows *snowflakeRows) addDownloader(newDL chunkDownloader) {
 	}
 	rows.tailChunkDownloader.setNextChunkDownloader(newDL)
 	rows.tailChunkDownloader = newDL
+}
+
+type SfRows interface {
+	Close() (err error) 
+	ColumnTypeDatabaseTypeName(index int) 
+	ColumnTypeLength(index int) (length int64, ok bool)
+	GetArrowBatches() ([]*ArrowBatch, error) 
+	Monitoring(wait time.Duration) *QueryMonitoringData
+	ColumnTypePrecisionScale(index int) (precision, scale int64, ok bool)
+	Columns() []string
+	ColumnTypeScanType(index int) reflect.Type
+	GetQueryID() string
+	Monitoring(wait time.Duration) *QueryMonitoringData
+	QueryGraph(wait time.Duration) *QueryGraphData
+	Next(dest []driver.Value) (err error)
+	HasNextResultSet() bool 
+	NextResultSet() error 
 }
