@@ -833,12 +833,6 @@ type MonitoringResultFetcher interface {
 	FetchMonitoringResult(queryID string, runtime time.Duration) (*monitoringResult, error)
 }
 
-// Query is an interface which allows to run a query and get back driver rows, which can be 
-// cast to snowflake rows so we dont have to keep a fork of dbSql to call rows.Inner
-type Query interface {
-	QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error)
-}
-
 // FetchMonitoringResult returns a monitoringResult object
 // Multiplex can call monitoringResult.Monitoring() to get the QueryMonitoringData
 func (sc *snowflakeConn) FetchMonitoringResult(queryID string, runtime time.Duration) (*monitoringResult, error) {
