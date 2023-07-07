@@ -461,6 +461,21 @@ func fillMissingConfigParameters(cfg *Config) error {
 	if authRequiresPassword(cfg) && strings.TrimSpace(cfg.Password) == "" {
 		return errEmptyPassword()
 	}
+	if cfg.Authenticator != AuthTypeOAuth &&
+		cfg.Authenticator != AuthTypeTokenAccessor &&
+		strings.Trim(cfg.User, " ") == "" {
+		// oauth and token accessor do not require a username
+		return errEmptyUsername()
+	}
+
+	if cfg.Authenticator != AuthTypeExternalBrowser &&
+		cfg.Authenticator != AuthTypeOAuth &&
+		cfg.Authenticator != AuthTypeJwt &&
+		cfg.Authenticator != AuthTypeTokenAccessor &&
+		strings.Trim(cfg.Password, " ") == "" {
+		// no password parameter is required for EXTERNALBROWSER, OAUTH JWT, or TOKENACCESSOR.
+		return errEmptyPassword()
+	}
 	if strings.Trim(cfg.Protocol, " ") == "" {
 		cfg.Protocol = "https"
 	}
