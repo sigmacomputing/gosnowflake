@@ -26,6 +26,7 @@ type SnowflakeResult interface {
 	QueryGraph(time.Duration) *QueryGraphData
 }
 
+// SnowflakeChunkResult for snowflake chunk results
 type SnowflakeChunkResult interface {
 	GetChunkMetas() []ExecResponseChunk
 }
