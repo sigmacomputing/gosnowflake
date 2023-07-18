@@ -40,7 +40,9 @@ type execResponseRowType struct {
 }
 
 type ExecResponseChunk struct {
-	execResponseChunk
+	RowCount         int   `json:"rowCount"`
+	UncompressedSize int64 `json:"uncompressedSize"`
+	CompressedSize   int64 `json:"compressedSize"`
 }
 
 type execResponseChunk struct {
