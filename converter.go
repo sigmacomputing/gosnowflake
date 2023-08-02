@@ -954,15 +954,35 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 				}
 				defer newCol.Release()
 			} else if srcColumnMeta.Scale != 0 {
-				result, err := compute.Divide(ctx, compute.ArithmeticOptions{NoCheckOverflow: true},
-					&compute.ArrayDatum{Value: newCol.Data()},
-					compute.NewDatum(math.Pow10(int(srcColumnMeta.Scale))))
+
+				// gosnowflake driver uses compute.Divide() which could bring `integer value not in range: -9007199254740992 to 9007199254740992` error 
+				// before we figure this out, we can convert what we receive to arrow.Decimal and follow the same code path as above.
+				decimalData := array.NewDecimal128Data(newCol.Data())
+				builder := array.NewDecimal128Builder(memory.NewCheckedAllocator(memory.NewGoAllocator()), &arrow.Decimal128Type{Precision: 38, Scale: int32(srcColumnMeta.Scale)})
+				boolArray := make([]bool, col.Len())
+				for i := range boolArray {
+					boolArray[i] = true
+				}
+				builder.AppendValues(decimalData.Values(), boolArray)
+				array := builder.NewArray()
+				builder.Release()
+
+				newCol, err = compute.CastArray(ctx, array, compute.UnsafeCastOptions(arrow.PrimitiveTypes.Float64))
 				if err != nil {
 					return nil, err
 				}
-				defer result.Release()
-				newCol = result.(*compute.ArrayDatum).MakeArray()
 				defer newCol.Release()
+
+				// result, err := compute.Divide(ctx, compute.ArithmeticOptions{NoCheckOverflow: true},
+				// 	&compute.ArrayDatum{Value: newCol.Data()},
+				// 	compute.NewDatum(math.Pow10(int(srcColumnMeta.Scale))))
+				// if err != nil {
+				// 	println("errored", err.Error())
+				// 	return nil, err
+				// }
+				// defer result.Release()
+				// newCol = result.(*compute.ArrayDatum).MakeArray()
+				// defer newCol.Release()
 			}
 		case timeType:
 			newCol, err = compute.CastArray(ctx, col, compute.SafeCastOptions(arrow.FixedWidthTypes.Time64ns))
