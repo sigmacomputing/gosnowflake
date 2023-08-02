@@ -842,9 +842,10 @@ func TestArrowToRecord(t *testing.T) {
 			append:   func(b array.Builder, vs interface{}) { b.(*array.Int64Builder).AppendValues(vs.([]int64), valids) },
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]int64)
-				for i, f := range convertedRec.Column(0).(*array.Float64).Float64Values() {
+				for i, f := range convertedRec.Column(0).(*array.Decimal128).Values() {
 					rawFloat, _ := intToBigFloat(srcvs[i], 5).Float64()
-					if rawFloat != f {
+					confertedFloat, _ := decimalToBigFloat(f, 5).Float64()
+					if rawFloat != confertedFloat {
 						return i
 					}
 				}
