@@ -975,7 +975,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 				}
 				builder := array.NewFloat64Builder(memory.NewCheckedAllocator(memory.NewGoAllocator()))
 				builder.AppendValues(floatValues, nil)
-				newCol := builder.NewArray()
+				newCol = builder.NewArray()
 				builder.Release()
 				defer newCol.Release()
 			}
