@@ -1042,38 +1042,127 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 				return nil, err
 			}
 			defer newCol.Release()
-		case timestampNtzType, timestampLtzType, timestampTzType:
+		case timestampNtzType:
 			if useOriginalTimestamp {
 				// do nothing - return timestamp as is
 			} else {
-				var tb *array.TimestampBuilder
-				if snowflakeType == timestampLtzType {
-					tb = array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: loc.String()})
-				} else {
-					tb = array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
-				}
-				defer tb.Release()
-
-				for i := 0; i < int(numRows); i++ {
-					ts := arrowSnowflakeTimestampToTime(col, snowflakeType, int(srcColumnMeta.Scale), i, loc)
-					if ts != nil {
-						ar := arrow.Timestamp(ts.UnixNano())
-						// in case of overflow in arrow timestamp return error
-						if ts.Year() != ar.ToTime(arrow.Nanosecond).Year() {
-							return nil, &SnowflakeError{
-								Number:   ErrTooHighTimestampPrecision,
-								SQLState: SQLStateInvalidDataTimeFormat,
-								Message:  fmt.Sprintf("Cannot convert timestamp %v in column %v to Arrow.Timestamp data type due to too high precision. Please use context with WithOriginalTimestamp.", ts.UTC(), srcColumnMeta.Name),
-							}
+				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
+				if col.DataType().ID() == arrow.STRUCT {
+					structData := col.(*array.Struct)
+					epoch := structData.Field(0).(*array.Int64).Int64Values()
+					fraction := structData.Field(1).(*array.Int32).Int32Values()
+					for i := 0; i < int(numRows); i++ {
+						if !col.IsNull(i) {
+							val := time.Unix(epoch[i], int64(fraction[i]))
+							tb.Append(arrow.Timestamp(val.UnixNano()))
+						} else {
+							tb.AppendNull()
 						}
-						tb.Append(ar)
-					} else {
-						tb.AppendNull()
+					}
+				} else if col.DataType().ID() == arrow.INT64 {
+					for i, t := range col.(*array.Int64).Int64Values() {
+						if !col.IsNull(i) {
+							val := time.Unix(0, t*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).UTC()
+							tb.Append(arrow.Timestamp(val.UnixNano()))
+						} else {
+							tb.AppendNull()
+						}
+					}
+				} else {
+					for i, t := range col.(*array.Timestamp).TimestampValues() {
+						if !col.IsNull(i) {
+							val := time.Unix(0, int64(t)*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).UTC()
+							tb.Append(arrow.Timestamp(val.UnixNano()))
+						} else {
+							tb.AppendNull()
+						}
 					}
 				}
-
 				newCol = tb.NewArray()
 				defer newCol.Release()
+				tb.Release()
+			}
+		case timestampLtzType:
+			if useOriginalTimestamp {
+				// do nothing - return timestamp as is
+			} else {
+				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: loc.String()})
+				if col.DataType().ID() == arrow.STRUCT {
+					structData := col.(*array.Struct)
+					epoch := structData.Field(0).(*array.Int64).Int64Values()
+					fraction := structData.Field(1).(*array.Int32).Int32Values()
+					for i := 0; i < int(numRows); i++ {
+						if !col.IsNull(i) {
+							val := time.Unix(epoch[i], int64(fraction[i]))
+							tb.Append(arrow.Timestamp(val.UnixNano()))
+						} else {
+							tb.AppendNull()
+						}
+					}
+				} else if col.DataType().ID() == arrow.INT64 {
+					for i, t := range col.(*array.Int64).Int64Values() {
+						if !col.IsNull(i) {
+							q := t / int64(math.Pow10(int(srcColumnMeta.Scale)))
+							r := t % int64(math.Pow10(int(srcColumnMeta.Scale)))
+							val := time.Unix(q, r)
+							tb.Append(arrow.Timestamp(val.UnixNano()))
+						} else {
+							tb.AppendNull()
+						}
+					}
+				} else {
+					for i, t := range col.(*array.Timestamp).TimestampValues() {
+						if !col.IsNull(i) {
+							q := int64(t) / int64(math.Pow10(int(srcColumnMeta.Scale)))
+							r := int64(t) % int64(math.Pow10(int(srcColumnMeta.Scale)))
+							val := time.Unix(q, r)
+							tb.Append(arrow.Timestamp(val.UnixNano()))
+						} else {
+							tb.AppendNull()
+						}
+					}
+				}
+				newCol = tb.NewArray()
+				defer newCol.Release()
+				tb.Release()
+			}
+		case timestampTzType:
+			if useOriginalTimestamp {
+				// do nothing - return timestamp as is
+			} else {
+				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
+				structData := col.(*array.Struct)
+				if structData.NumField() == 2 {
+					epoch := structData.Field(0).(*array.Int64).Int64Values()
+					timezone := structData.Field(1).(*array.Int32).Int32Values()
+					for i := 0; i < int(numRows); i++ {
+						if !col.IsNull(i) {
+							loc := Location(int(timezone[i]) - 1440)
+							tt := time.Unix(epoch[i], 0)
+							val := tt.In(loc)
+							tb.Append(arrow.Timestamp(val.UnixNano()))
+						} else {
+							tb.AppendNull()
+						}
+					}
+				} else {
+					epoch := structData.Field(0).(*array.Int64).Int64Values()
+					fraction := structData.Field(1).(*array.Int32).Int32Values()
+					timezone := structData.Field(2).(*array.Int32).Int32Values()
+					for i := 0; i < int(numRows); i++ {
+						if !col.IsNull(i) {
+							loc := Location(int(timezone[i]) - 1440)
+							tt := time.Unix(epoch[i], int64(fraction[i]))
+							val := tt.In(loc)
+							tb.Append(arrow.Timestamp(val.UnixNano()))
+						} else {
+							tb.AppendNull()
+						}
+					}
+				}
+				newCol = tb.NewArray()
+				defer newCol.Release()
+				tb.Release()
 			}
 		}
 		cols = append(cols, newCol)
