@@ -889,8 +889,8 @@ func TestArrowToRecord(t *testing.T) {
 			logical: "non utf-8 binary",
 			sc:      arrow.NewSchema([]arrow.Field{{Type: &arrow.BinaryType{}}}, nil),
 			values: [][]byte{
-				{0x80, 0x81, 0x82},
-				{0xF0, 0xF1, 0xF2},
+				{0x8F},
+				{0x9F},
 			},
 			nrows:   2,
 			builder: array.NewBinaryBuilder(pool, arrow.BinaryTypes.Binary),
