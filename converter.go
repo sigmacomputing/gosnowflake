@@ -446,7 +446,7 @@ func arrowToValue(
 	case booleanType:
 		boolData, ok := srcValue.(*array.Boolean)
 		if !ok {
-			return fmt.Errorf("expect type *array.Boolean but get ", srcValue.DataType())
+			return fmt.Errorf("expect type *array.Boolean but get %s", srcValue.DataType())
 		}
 		for i := range destcol {
 			if !srcValue.IsNull(i) {
@@ -459,7 +459,7 @@ func arrowToValue(
 		// e.g. FLOAT/REAL/DOUBLE
 		float64Array, ok := srcValue.(*array.Float64)
 		if !ok {
-			return fmt.Errorf("expect type *array.Float64 but get ", srcValue.DataType())
+			return fmt.Errorf("expect type *array.Float64 but get %s", srcValue.DataType())
 		}
 		for i, flt64 := range float64Array.Float64Values() {
 			if !srcValue.IsNull(i) {
@@ -470,7 +470,7 @@ func arrowToValue(
 	case textType, arrayType, variantType, objectType:
 		strings, ok := srcValue.(*array.String)
 		if !ok {
-			return fmt.Errorf("expect type *array.String but get ", srcValue.DataType())
+			return fmt.Errorf("expect type *array.String but get %s", srcValue.DataType())
 		}
 		for i := range destcol {
 			if !srcValue.IsNull(i) {
@@ -481,7 +481,7 @@ func arrowToValue(
 	case binaryType:
 		binaryData, ok := srcValue.(*array.Binary)
 		if !ok {
-			return fmt.Errorf("expect type *array.Binary but get ", srcValue.DataType())
+			return fmt.Errorf("expect type *array.Binary but get %s", srcValue.DataType())
 		}
 		for i := range destcol {
 			if !srcValue.IsNull(i) {
@@ -492,7 +492,7 @@ func arrowToValue(
 	case dateType:
 		date32Array, ok := srcValue.(*array.Date32)
 		if !ok {
-			return fmt.Errorf("expect type *array.Date32 but get ", srcValue.DataType())
+			return fmt.Errorf("expect type *array.Date32 but get %s", srcValue.DataType())
 		}
 		for i, date32 := range date32Array.Date32Values() {
 			if !srcValue.IsNull(i) {
@@ -512,7 +512,7 @@ func arrowToValue(
 		} else {
 			int32Array, ok := srcValue.(*array.Int32)
 			if !ok {
-				return fmt.Errorf("expect type *array.Int32 but get ", int32Array.DataType())
+				return fmt.Errorf("expect type *array.Int32 but get %s", int32Array.DataType())
 			}
 			int32Values := int32Array.Int32Values()
 			for i, i32 := range int32Values {
@@ -527,13 +527,13 @@ func arrowToValue(
 			structData := srcValue.(*array.Struct)
 			epochArray, ok := structData.Field(0).(*array.Int64)
 			if !ok {
-				return fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get ", epochArray.DataType())
+				return fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get %s", epochArray.DataType())
 			}
 			epoch := epochArray.Int64Values()
 
 			fractionArray, ok := structData.Field(1).(*array.Int32)
 			if !ok {
-				return fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get ", fractionArray.DataType())
+				return fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get %s", fractionArray.DataType())
 			}
 			fraction := fractionArray.Int32Values()
 			for i := range destcol {
@@ -544,7 +544,7 @@ func arrowToValue(
 		} else {
 			int64Array, ok := srcValue.(*array.Int64)
 			if !ok {
-				return fmt.Errorf("expect type *array.Int64 but get ", int64Array.DataType())
+				return fmt.Errorf("expect type *array.Int64 but get %s", int64Array.DataType())
 			}
 			int64Values := int64Array.Int64Values()
 			for i, t := range int64Values {
@@ -570,7 +570,7 @@ func arrowToValue(
 		} else {
 			int64Array, ok := srcValue.(*array.Int64)
 			if !ok {
-				return fmt.Errorf("expect type *array.Int64 but get ", int64Array.DataType())
+				return fmt.Errorf("expect type *array.Int64 but get %s", int64Array.DataType())
 			}
 			int64Values := int64Array.Int64Values()
 			for i, t := range int64Values {
@@ -583,17 +583,17 @@ func arrowToValue(
 	case timestampTzType:
 		structData, ok := srcValue.(*array.Struct)
 		if !ok {
-			return fmt.Errorf("expect type *array.Struct but get ", srcValue.DataType())
+			return fmt.Errorf("expect type *array.Struct but get %s", srcValue.DataType())
 		}
 		if structData.NumField() == 2 {
 			epochArray, ok := structData.Field(0).(*array.Int64)
 			if !ok {
-				return fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get ", epochArray.DataType())
+				return fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get %s", epochArray.DataType())
 			}
 			epoch := epochArray.Int64Values()
 			timezoneArray, ok := structData.Field(1).(*array.Int32)
 			if !ok {
-				return fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get ", timezoneArray.DataType())
+				return fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get %s", timezoneArray.DataType())
 			}
 			timezone := timezoneArray.Int32Values()
 			for i := range destcol {
@@ -606,19 +606,19 @@ func arrowToValue(
 		} else {
 			epochArray, ok := structData.Field(0).(*array.Int64)
 			if !ok {
-				return fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get ", epochArray.DataType())
+				return fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get %s", epochArray.DataType())
 			}
 			epoch := epochArray.Int64Values()
 
 			fractionArray, ok := structData.Field(1).(*array.Int32)
 			if !ok {
-				return fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get ", fractionArray.DataType())
+				return fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get %s", fractionArray.DataType())
 			}
 			fraction := fractionArray.Int32Values()
 
 			timezoneArray, ok := structData.Field(2).(*array.Int32)
 			if !ok {
-				return fmt.Errorf("expect structData.Field(2) to be *array.Int32 but get ", timezoneArray.DataType())
+				return fmt.Errorf("expect structData.Field(2) to be *array.Int32 but get %s", timezoneArray.DataType())
 			}
 			timezone := timezoneArray.Int32Values()
 
@@ -1064,13 +1064,13 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 				structData := col.(*array.Struct)
 				epochArray, ok := structData.Field(0).(*array.Int64)
 				if !ok {
-					return nil, fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get ", epochArray.DataType())
+					return nil, fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get %s", epochArray.DataType())
 				}
 				epoch := epochArray.Int64Values()
 
 				fractionArray, ok := structData.Field(1).(*array.Int32)
 				if !ok {
-					return nil, fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get ", fractionArray.DataType())
+					return nil, fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get %s", fractionArray.DataType())
 				}
 				fraction := fractionArray.Int32Values()
 
@@ -1094,7 +1094,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 			} else {
 				timestampArray, ok := col.(*array.Timestamp)
 				if !ok {
-					return nil, fmt.Errorf("expect type *array.Timestamp but get ", col.DataType())
+					return nil, fmt.Errorf("expect type *array.Timestamp but get %s", col.DataType())
 				}
 				timestampValues := timestampArray.TimestampValues()
 				for i, t := range timestampValues {
@@ -1138,7 +1138,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 			} else {
 				timestampArray, ok := col.(*array.Timestamp)
 				if !ok {
-					return nil, fmt.Errorf("expect type *array.Timestamp but get ", col.DataType())
+					return nil, fmt.Errorf("expect type *array.Timestamp but get %s", col.DataType())
 				}
 				timestampValues := timestampArray.TimestampValues()
 				for i, t := range timestampValues {
@@ -1159,17 +1159,17 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
 			structData, ok := col.(*array.Struct)
 			if !ok {
-				return nil, fmt.Errorf("expect type *array.Struct but get ", col.DataType())
+				return nil, fmt.Errorf("expect type *array.Struct but get %s", col.DataType())
 			}
 			if structData.NumField() == 2 {
 				epochArray, ok := structData.Field(0).(*array.Int64)
 				if !ok {
-					return nil, fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get ", epochArray.DataType())
+					return nil, fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get %s", epochArray.DataType())
 				}
 				epoch := epochArray.Int64Values()
 				timezoneArray, ok := structData.Field(1).(*array.Int32)
 				if !ok {
-					return nil, fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get ", timezoneArray.DataType())
+					return nil, fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get %s", timezoneArray.DataType())
 				}
 				timezone := timezoneArray.Int32Values()
 				for i := 0; i < int(numRows); i++ {
@@ -1185,19 +1185,19 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 			} else {
 				epochArray, ok := structData.Field(0).(*array.Int64)
 				if !ok {
-					return nil, fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get ", epochArray.DataType())
+					return nil, fmt.Errorf("expect structData.Field(0) to be *array.Int64 but get %s", epochArray.DataType())
 				}
 				epoch := epochArray.Int64Values()
 
 				fractionArray, ok := structData.Field(1).(*array.Int32)
 				if !ok {
-					return nil, fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get ", fractionArray.DataType())
+					return nil, fmt.Errorf("expect structData.Field(1) to be *array.Int32 but get %s", fractionArray.DataType())
 				}
 				fraction := fractionArray.Int32Values()
 
 				timezoneArray, ok := structData.Field(2).(*array.Int32)
 				if !ok {
-					return nil, fmt.Errorf("expect structData.Field(2) to be *array.Int32 but get ", timezoneArray.DataType())
+					return nil, fmt.Errorf("expect structData.Field(2) to be *array.Int32 but get %s", timezoneArray.DataType())
 				}
 				timezone := timezoneArray.Int32Values()
 
