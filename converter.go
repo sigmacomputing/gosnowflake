@@ -1306,22 +1306,7 @@ func recordToSchema(sc *arrow.Schema, rowType []execResponseRowType, loc *time.L
 		converted := true
 
 		var t arrow.DataType
-		switch getSnowflakeType(srcColumnMeta.Type) {
-		case fixedType:
-			switch f.Type.ID() {
-			case arrow.DECIMAL:
-				if srcColumnMeta.Scale == 0 {
-					t = &arrow.Int64Type{}
-				} else {
-					t = &arrow.Float64Type{}
-				}
-			default:
-				if srcColumnMeta.Scale != 0 {
-					t = &arrow.Float64Type{}
-				} else {
-					converted = false
-				}
-			}
+		switch getSnowflakeType(strings.ToUpper(srcColumnMeta.Type)) {
 		case timeType:
 			t = &arrow.Time64Type{Unit: arrow.Nanosecond}
 		case timestampNtzType, timestampTzType:
