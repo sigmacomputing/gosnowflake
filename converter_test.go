@@ -4,12 +4,15 @@ package gosnowflake
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"math/cmplx"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +46,21 @@ func stringFloatToDecimal(src string, scale int64) (decimal128.Num, bool) {
 	n.Int(&z)
 	high.QuoRem(&z, decimalShift, &low)
 	return decimal128.New(high.Int64(), low.Uint64()), ok
+}
+
+func stringFloatToInt(src string, scale int64) (int64, bool) {
+	b, ok := new(big.Float).SetString(src)
+	if !ok {
+		return 0, ok
+	}
+	s := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(scale), nil))
+	n := new(big.Float).Mul(b, s)
+	var z big.Int
+	n.Int(&z)
+	if !z.IsInt64() {
+		return 0, false
+	}
+	return z.Int64(), true
 }
 
 type tcGoTypeToSnowflake struct {
@@ -90,10 +108,12 @@ func TestGoTypeToSnowflake(t *testing.T) {
 		{in: []int{1}, tmode: nil, out: unSupportedType},
 	}
 	for _, test := range testcases {
-		a := goTypeToSnowflake(test.in, test.tmode)
-		if a != test.out {
-			t.Errorf("failed. in: %v, tmode: %v, expected: %v, got: %v", test.in, test.tmode, test.out, a)
-		}
+		t.Run(fmt.Sprintf("%v_%v_%v", test.in, test.out, test.tmode), func(t *testing.T) {
+			a := goTypeToSnowflake(test.in, test.tmode)
+			if a != test.out {
+				t.Errorf("failed. in: %v, tmode: %v, expected: %v, got: %v", test.in, test.tmode, test.out, a)
+			}
+		})
 	}
 }
 
@@ -119,13 +139,16 @@ func TestSnowflakeTypeToGo(t *testing.T) {
 		{in: arrayType, scale: 0, out: reflect.TypeOf("")},
 		{in: binaryType, scale: 0, out: reflect.TypeOf([]byte{})},
 		{in: booleanType, scale: 0, out: reflect.TypeOf(true)},
+		{in: sliceType, scale: 0, out: reflect.TypeOf("")},
 	}
 	for _, test := range testcases {
-		a := snowflakeTypeToGo(test.in, test.scale)
-		if a != test.out {
-			t.Errorf("failed. in: %v, scale: %v, expected: %v, got: %v",
-				test.in, test.scale, test.out, a)
-		}
+		t.Run(fmt.Sprintf("%v_%v", test.in, test.out), func(t *testing.T) {
+			a := snowflakeTypeToGo(test.in, test.scale)
+			if a != test.out {
+				t.Errorf("failed. in: %v, scale: %v, expected: %v, got: %v",
+					test.in, test.scale, test.out, a)
+			}
+		})
 	}
 }
 
@@ -140,6 +163,10 @@ func TestValueToString(t *testing.T) {
 	localTime := time.Date(2019, 2, 6, 14, 17, 31, 123456789, time.FixedZone("-08:00", -8*3600))
 	utcTime := time.Date(2019, 2, 6, 22, 17, 31, 123456789, time.UTC)
 	expectedUnixTime := "1549491451123456789" // time.Unix(1549491451, 123456789).Format(time.RFC3339) == "2019-02-06T14:17:31-08:00"
+	expectedBool := "true"
+	expectedInt64 := "1"
+	expectedFloat64 := "1.1"
+	expectedString := "teststring"
 
 	if s, err := valueToString(localTime, DataTypeTimestampLtz); err != nil {
 		t.Error("unexpected error")
@@ -156,10 +183,42 @@ func TestValueToString(t *testing.T) {
 	} else if *s != expectedUnixTime {
 		t.Errorf("expected '%v', got '%v'", expectedUnixTime, *s)
 	}
+
+	if s, err := valueToString(sql.NullBool{Bool: true, Valid: true}, DataTypeTimestampLtz); err != nil {
+		t.Error("unexpected error")
+	} else if s == nil {
+		t.Errorf("expected '%v', got %v", expectedBool, s)
+	} else if *s != expectedBool {
+		t.Errorf("expected '%v', got '%v'", expectedBool, *s)
+	}
+
+	if s, err := valueToString(sql.NullInt64{Int64: 1, Valid: true}, DataTypeTimestampLtz); err != nil {
+		t.Error("unexpected error")
+	} else if s == nil {
+		t.Errorf("expected '%v', got %v", expectedInt64, s)
+	} else if *s != expectedInt64 {
+		t.Errorf("expected '%v', got '%v'", expectedInt64, *s)
+	}
+
+	if s, err := valueToString(sql.NullFloat64{Float64: 1.1, Valid: true}, DataTypeTimestampLtz); err != nil {
+		t.Error("unexpected error")
+	} else if s == nil {
+		t.Errorf("expected '%v', got %v", expectedFloat64, s)
+	} else if *s != expectedFloat64 {
+		t.Errorf("expected '%v', got '%v'", expectedFloat64, *s)
+	}
+
+	if s, err := valueToString(sql.NullString{String: "teststring", Valid: true}, DataTypeTimestampLtz); err != nil {
+		t.Error("unexpected error")
+	} else if s == nil {
+		t.Errorf("expected '%v', got %v", expectedString, s)
+	} else if *s != expectedString {
+		t.Errorf("expected '%v', got '%v'", expectedString, *s)
+	}
 }
 
 func TestExtractTimestamp(t *testing.T) {
-	s := "1234abcdef"
+	s := "1234abcdef" // pragma: allowlist secret
 	_, _, err := extractTimestamp(&s)
 	if err == nil {
 		t.Errorf("should raise error: %v", s)
@@ -188,12 +247,14 @@ func TestStringToValue(t *testing.T) {
 	}
 
 	for _, tt := range types {
-		rowType = &execResponseRowType{
-			Type: tt,
-		}
-		if err = stringToValue(&dest, *rowType, &source, nil); err == nil {
-			t.Errorf("should raise error. type: %v, value:%v", tt, source)
-		}
+		t.Run(tt, func(t *testing.T) {
+			rowType = &execResponseRowType{
+				Type: tt,
+			}
+			if err = stringToValue(&dest, *rowType, &source, nil); err == nil {
+				t.Errorf("should raise error. type: %v, value:%v", tt, source)
+			}
+		})
 	}
 
 	sources := []string{
@@ -207,12 +268,14 @@ func TestStringToValue(t *testing.T) {
 
 	for _, ss := range sources {
 		for _, tt := range types {
-			rowType = &execResponseRowType{
-				Type: tt,
-			}
-			if err = stringToValue(&dest, *rowType, &ss, nil); err == nil {
-				t.Errorf("should raise error. type: %v, value:%v", tt, source)
-			}
+			t.Run(ss+tt, func(t *testing.T) {
+				rowType = &execResponseRowType{
+					Type: tt,
+				}
+				if err = stringToValue(&dest, *rowType, &ss, nil); err == nil {
+					t.Errorf("should raise error. type: %v, value:%v", tt, source)
+				}
+			})
 		}
 	}
 
@@ -235,21 +298,25 @@ type tcArrayToString struct {
 func TestArrayToString(t *testing.T) {
 	testcases := []tcArrayToString{
 		{in: driver.NamedValue{Value: &intArray{1, 2}}, typ: fixedType, out: []string{"1", "2"}},
+		{in: driver.NamedValue{Value: &int32Array{1, 2}}, typ: fixedType, out: []string{"1", "2"}},
 		{in: driver.NamedValue{Value: &int64Array{3, 4, 5}}, typ: fixedType, out: []string{"3", "4", "5"}},
 		{in: driver.NamedValue{Value: &float64Array{6.7}}, typ: realType, out: []string{"6.7"}},
+		{in: driver.NamedValue{Value: &float32Array{1.5}}, typ: realType, out: []string{"1.5"}},
 		{in: driver.NamedValue{Value: &boolArray{true, false}}, typ: booleanType, out: []string{"true", "false"}},
 		{in: driver.NamedValue{Value: &stringArray{"foo", "bar", "baz"}}, typ: textType, out: []string{"foo", "bar", "baz"}},
 	}
 	for _, test := range testcases {
-		s, a := snowflakeArrayToString(&test.in, false)
-		if s != test.typ {
-			t.Errorf("failed. in: %v, expected: %v, got: %v", test.in, test.typ, s)
-		}
-		for i, v := range a {
-			if *v != test.out[i] {
-				t.Errorf("failed. in: %v, expected: %v, got: %v", test.in, test.out[i], a)
+		t.Run(strings.Join(test.out, "_"), func(t *testing.T) {
+			s, a := snowflakeArrayToString(&test.in, false)
+			if s != test.typ {
+				t.Errorf("failed. in: %v, expected: %v, got: %v", test.in, test.typ, s)
 			}
-		}
+			for i, v := range a {
+				if *v != test.out[i] {
+					t.Errorf("failed. in: %v, expected: %v, got: %v", test.in, test.out[i], a)
+				}
+			}
+		})
 	}
 }
 
@@ -272,20 +339,86 @@ func TestArrowToValue(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		logical  string
-		physical string
-		rowType  execResponseRowType
-		values   interface{}
-		builder  array.Builder
-		append   func(b array.Builder, vs interface{})
-		compare  func(src interface{}, dst []snowflakeValue) int
+		logical         string
+		physical        string
+		rowType         execResponseRowType
+		values          interface{}
+		builder         array.Builder
+		append          func(b array.Builder, vs interface{})
+		compare         func(src interface{}, dst []snowflakeValue) int
+		higherPrecision bool
 	}{
 		{
+			logical:         "fixed",
+			physical:        "number", // default: number(38, 0)
+			values:          []int64{1, 2},
+			builder:         array.NewInt64Builder(pool),
+			append:          func(b array.Builder, vs interface{}) { b.(*array.Int64Builder).AppendValues(vs.([]int64), valids) },
+			higherPrecision: true,
+		},
+		{
 			logical:  "fixed",
-			physical: "number", // default: number(38, 0)
-			values:   []int64{1, 2},
+			physical: "number(38,5)",
+			rowType:  execResponseRowType{Scale: 5},
+			values:   []string{"1.05430", "2.08983"},
 			builder:  array.NewInt64Builder(pool),
-			append:   func(b array.Builder, vs interface{}) { b.(*array.Int64Builder).AppendValues(vs.([]int64), valids) },
+			append: func(b array.Builder, vs interface{}) {
+				for _, s := range vs.([]string) {
+					num, ok := stringFloatToInt(s, 5)
+					if !ok {
+						t.Fatalf("failed to convert to int")
+					}
+					b.(*array.Int64Builder).Append(num)
+				}
+			},
+			compare: func(src interface{}, dst []snowflakeValue) int {
+				srcvs := src.([]string)
+				for i := range srcvs {
+					num, ok := stringFloatToInt(srcvs[i], 5)
+					if !ok {
+						return i
+					}
+					srcDec := intToBigFloat(num, 5)
+					dstDec := dst[i].(*big.Float)
+					if srcDec.Cmp(dstDec) != 0 {
+						return i
+					}
+				}
+				return -1
+			},
+			higherPrecision: true,
+		},
+		{
+			logical:  "fixed",
+			physical: "number(38,5)",
+			rowType:  execResponseRowType{Scale: 5},
+			values:   []string{"1.05430", "2.08983"},
+			builder:  array.NewInt64Builder(pool),
+			append: func(b array.Builder, vs interface{}) {
+				for _, s := range vs.([]string) {
+					num, ok := stringFloatToInt(s, 5)
+					if !ok {
+						t.Fatalf("failed to convert to int")
+					}
+					b.(*array.Int64Builder).Append(num)
+				}
+			},
+			compare: func(src interface{}, dst []snowflakeValue) int {
+				srcvs := src.([]string)
+				for i := range srcvs {
+					num, ok := stringFloatToInt(srcvs[i], 5)
+					if !ok {
+						return i
+					}
+					srcDec := fmt.Sprintf("%.*f", 5, float64(num)/math.Pow10(int(5)))
+					dstDec := dst[i]
+					if srcDec != dstDec {
+						return i
+					}
+				}
+				return -1
+			},
+			higherPrecision: false,
 		},
 		{
 			logical:  "fixed",
@@ -316,6 +449,7 @@ func TestArrowToValue(t *testing.T) {
 				}
 				return -1
 			},
+			higherPrecision: true,
 		},
 		{
 			logical:  "fixed",
@@ -347,6 +481,7 @@ func TestArrowToValue(t *testing.T) {
 				}
 				return -1
 			},
+			higherPrecision: true,
 		},
 		{
 			logical:  "fixed",
@@ -363,6 +498,7 @@ func TestArrowToValue(t *testing.T) {
 				}
 				return -1
 			},
+			higherPrecision: true,
 		},
 		{
 			logical:  "fixed",
@@ -379,6 +515,7 @@ func TestArrowToValue(t *testing.T) {
 				}
 				return -1
 			},
+			higherPrecision: true,
 		},
 		{
 			logical:  "fixed",
@@ -395,13 +532,79 @@ func TestArrowToValue(t *testing.T) {
 				}
 				return -1
 			},
+			higherPrecision: true,
 		},
 		{
 			logical:  "fixed",
-			physical: "int64",
-			values:   []int64{1, 2},
-			builder:  array.NewInt64Builder(pool),
-			append:   func(b array.Builder, vs interface{}) { b.(*array.Int64Builder).AppendValues(vs.([]int64), valids) },
+			physical: "int32",
+			values:   []string{"1.23456", "2.34567"},
+			rowType:  execResponseRowType{Scale: 5},
+			builder:  array.NewInt32Builder(pool),
+			append: func(b array.Builder, vs interface{}) {
+				for _, s := range vs.([]string) {
+					num, ok := stringFloatToInt(s, 5)
+					if !ok {
+						t.Fatalf("failed to convert to int")
+					}
+					b.(*array.Int32Builder).Append(int32(num))
+				}
+			},
+			compare: func(src interface{}, dst []snowflakeValue) int {
+				srcvs := src.([]string)
+				for i := range srcvs {
+					num, ok := stringFloatToInt(srcvs[i], 5)
+					if !ok {
+						return i
+					}
+					srcDec := intToBigFloat(num, 5)
+					dstDec := dst[i].(*big.Float)
+					if srcDec.Cmp(dstDec) != 0 {
+						return i
+					}
+				}
+				return -1
+			},
+			higherPrecision: true,
+		},
+		{
+			logical:  "fixed",
+			physical: "int32",
+			values:   []string{"1.23456", "2.34567"},
+			rowType:  execResponseRowType{Scale: 5},
+			builder:  array.NewInt32Builder(pool),
+			append: func(b array.Builder, vs interface{}) {
+				for _, s := range vs.([]string) {
+					num, ok := stringFloatToInt(s, 5)
+					if !ok {
+						t.Fatalf("failed to convert to int")
+					}
+					b.(*array.Int32Builder).Append(int32(num))
+				}
+			},
+			compare: func(src interface{}, dst []snowflakeValue) int {
+				srcvs := src.([]string)
+				for i := range srcvs {
+					num, ok := stringFloatToInt(srcvs[i], 5)
+					if !ok {
+						return i
+					}
+					srcDec := fmt.Sprintf("%.*f", 5, float64(num)/math.Pow10(int(5)))
+					dstDec := dst[i]
+					if srcDec != dstDec {
+						return i
+					}
+				}
+				return -1
+			},
+			higherPrecision: false,
+		},
+		{
+			logical:         "fixed",
+			physical:        "int64",
+			values:          []int64{1, 2},
+			builder:         array.NewInt64Builder(pool),
+			append:          func(b array.Builder, vs interface{}) { b.(*array.Int64Builder).AppendValues(vs.([]int64), valids) },
+			higherPrecision: true,
 		},
 		{
 			logical: "boolean",
@@ -458,6 +661,7 @@ func TestArrowToValue(t *testing.T) {
 				}
 				return -1
 			},
+			higherPrecision: true,
 		},
 		{
 			logical: "timestamp_ntz",
@@ -614,7 +818,9 @@ func TestArrowToValue(t *testing.T) {
 			meta := tc.rowType
 			meta.Type = tc.logical
 
-			if err := arrowToValue(dest, meta, arr, localTime.Location(), true); err != nil {
+			withHigherPrecision := tc.higherPrecision
+
+			if err := arrowToValue(dest, meta, arr, localTime.Location(), withHigherPrecision); err != nil {
 				t.Fatalf("error: %s", err)
 			}
 
@@ -1032,5 +1238,41 @@ func TestLargeTimestampBinding(t *testing.T) {
 		if scanValues[0] != timeValue {
 			t.Fatalf("unexpected result. expected: %v, got: %v", timeValue, scanValues[0])
 		}
+	}
+}
+
+func TestTimeTypeValueToString(t *testing.T) {
+	timeValue, err := time.Parse("2006-01-02 15:04:05", "2020-01-02 10:11:12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	offsetTimeValue, err := time.ParseInLocation("2006-01-02 15:04:05", "2020-01-02 10:11:12", Location(6*60))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testcases := []struct {
+		in       time.Time
+		dataType SnowflakeDataType
+		out      string
+	}{
+		{timeValue, DataTypeDate, "1577959872000"},
+		{timeValue, DataTypeTime, "36672000000000"},
+		{timeValue, DataTypeTimestampNtz, "1577959872000000000"},
+		{timeValue, DataTypeTimestampLtz, "1577959872000000000"},
+		{timeValue, DataTypeTimestampTz, "1577959872000000000 1440"},
+		{offsetTimeValue, DataTypeTimestampTz, "1577938272000000000 1800"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.out, func(t *testing.T) {
+			output, err := timeTypeValueToString(tc.in, tc.dataType)
+			if err != nil {
+				t.Error(err)
+			}
+			if strings.Compare(tc.out, *output) != 0 {
+				t.Errorf("failed to convert time %v of type %v. expected: %v, received: %v", tc.in, tc.dataType, tc.out, *output)
+			}
+		})
 	}
 }

@@ -50,8 +50,9 @@ func TestSubmitQuerySync(t *testing.T) {
 			// Set a long threshold to prevent the monitoring fetch from kicking in.
 			MonitoringFetcher: MonitoringFetcherConfig{QueryRuntimeThreshold: 1 * time.Hour},
 		},
-		rest:      sr,
-		telemetry: testTelemetry,
+		rest:              sr,
+		telemetry:         testTelemetry,
+		queryContextCache: (&queryContextCache{}).init(),
 	}
 
 	res, err := sc.SubmitQuerySync(context.TODO(), "")
@@ -129,8 +130,9 @@ func TestSubmitQuerySyncQueryComplete(t *testing.T) {
 			// Set a long threshold to prevent the monitoring fetch from kicking in.
 			MonitoringFetcher: MonitoringFetcherConfig{QueryRuntimeThreshold: 1 * time.Hour},
 		},
-		rest:      sr,
-		telemetry: testTelemetry,
+		rest:              sr,
+		telemetry:         testTelemetry,
+		queryContextCache: (&queryContextCache{}).init(),
 	}
 
 	res, err := sc.SubmitQuerySync(context.TODO(), "")

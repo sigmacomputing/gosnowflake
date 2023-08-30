@@ -122,7 +122,7 @@ func TestJWTTokenTimeout(t *testing.T) {
 
 	dsn := "user:pass@localhost:12345/db/schema?account=jwtAuthTokenTimeout&protocol=http&jwtClientTimeout=1"
 	dsn = appendPrivateKeyString(&dsn, testPrivKey)
-	db, err := sql.Open("snowflake", dsn)
+	db, err := sql.Open("sigmacomputing+gosnowflake", dsn)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

@@ -452,25 +452,40 @@ func TestDownloadChunkErrorStatus(t *testing.T) {
 
 func TestWithArrowBatchesNotImplementedForResult(t *testing.T) {
 	ctx := WithArrowBatches(context.Background())
-	runSnowflakeConnTest(t, func(sct *SCTest) {
+	config, err := ParseDSN(dsn)
+	if err != nil {
+		t.Error(err)
+	}
+	sc, err := buildSnowflakeConn(ctx, *config)
+	if err != nil {
+		t.Error(err)
+	}
+	defer sc.Close()
+	if err = authenticateWithConfig(sc); err != nil {
+		t.Error(err)
+	}
 
-		sct.mustExec("create or replace table testArrowBatches (a int, b int)", nil)
-		defer sct.sc.Exec("drop table if exists testArrowBatches", nil)
+	if _, err = sc.Exec("create or replace table testArrowBatches (a int, b int)", nil); err != nil {
+		t.Fatal(err)
+	}
+	defer sc.Exec("drop table if exists testArrowBatches", nil)
 
-		result := sct.mustExecContext(ctx, "insert into testArrowBatches values (1, 2), (3, 4), (5, 6)", []driver.NamedValue{})
+	result, err := sc.ExecContext(ctx, "insert into testArrowBatches values (1, 2), (3, 4), (5, 6)", []driver.NamedValue{})
+	if err != nil {
+		t.Error(err)
+	}
 
-		_, err := result.(*snowflakeResult).GetArrowBatches()
-		if err == nil {
-			t.Fatal("should have raised an error")
-		}
-		driverErr, ok := err.(*SnowflakeError)
-		if !ok {
-			t.Fatalf("should be snowflake error. err: %v", err)
-		}
-		if driverErr.Number != ErrNotImplemented {
-			t.Fatalf("unexpected error code. expected: %v, got: %v", ErrNotImplemented, driverErr.Number)
-		}
-	})
+	_, err = result.(*snowflakeResult).GetArrowBatches()
+	if err == nil {
+		t.Fatal("should have raised an error")
+	}
+	driverErr, ok := err.(*SnowflakeError)
+	if !ok {
+		t.Fatalf("should be snowflake error. err: %v", err)
+	}
+	if driverErr.Number != ErrNotImplemented {
+		t.Fatalf("unexpected error code. expected: %v, got: %v", ErrNotImplemented, driverErr.Number)
+	}
 }
 
 func TestLocationChangesAfterAlterSession(t *testing.T) {
