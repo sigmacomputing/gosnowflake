@@ -876,7 +876,7 @@ func TestDSN(t *testing.T) {
 			cfg: &Config{
 				User:         "u",
 				Password:     "p",
-				Account:      "",
+				Account:      "a.e",
 				ConnectionID: testConnectionID,
 			},
 			dsn: "u:p@a.e.snowflakecomputing.com:443?connectionId=abcd-0123-4567-1234&ocspFailOpen=true&region=e&validateDefaultParameters=true",
