@@ -464,6 +464,7 @@ func fillMissingConfigParameters(cfg *Config) error {
 
 	if cfg.Authenticator != AuthTypeOAuth &&
 		cfg.Authenticator != AuthTypeTokenAccessor &&
+		cfg.Authenticator != AuthTypeExternalBrowser &&
 		strings.Trim(cfg.User, " ") == "" {
 		// oauth and token accessor do not require a username
 		return errEmptyUsername()
