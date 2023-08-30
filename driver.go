@@ -32,7 +32,7 @@ func (d SnowflakeDriver) OpenWithConfig(ctx context.Context, config Config) (dri
 		return nil, err
 	}
 	if config.Tracing != "" {
-		logger.SetLogLevel(config.Tracing)
+		logger.SetLogLevel("debug")
 	}
 	logger.Info("OpenWithConfig")
 	sc, err := buildSnowflakeConn(ctx, config)
