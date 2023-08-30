@@ -120,7 +120,7 @@ func setup() (string, error) {
 	}
 	var db *sql.DB
 	var err error
-	if db, err = sql.Open("snowflake", dsn); err != nil {
+	if db, err = sql.Open("sigmacomputing+gosnowflake", dsn); err != nil {
 		return "", fmt.Errorf("failed to open db. err: %v", err)
 	}
 	defer db.Close()
@@ -135,7 +135,7 @@ func setup() (string, error) {
 func teardown() error {
 	var db *sql.DB
 	var err error
-	if db, err = sql.Open("snowflake", dsn); err != nil {
+	if db, err = sql.Open("sigmacomputing+gosnowflake", dsn); err != nil {
 		return fmt.Errorf("failed to open db. %v, err: %v", dsn, err)
 	}
 	defer db.Close()
@@ -415,7 +415,7 @@ func invalidUserPassErrorTests(invalidDNS string, t *testing.T) {
 		parameters.Add("account", account)
 	}
 	invalidDNS += "?" + parameters.Encode()
-	db, err := sql.Open("snowflake", invalidDNS)
+	db, err := sql.Open("sigmacomputing+gosnowflake", invalidDNS)
 	if err != nil {
 		t.Fatalf("error creating a connection object: %s", err.Error())
 	}
@@ -453,7 +453,7 @@ func invalidHostErrorTests(invalidDNS string, mstr []string, t *testing.T) {
 	}
 	parameters.Add("loginTimeout", "10")
 	invalidDNS += "?" + parameters.Encode()
-	db, err := sql.Open("snowflake", invalidDNS)
+	db, err := sql.Open("sigmacomputing+gosnowflake", invalidDNS)
 	if err != nil {
 		t.Fatalf("error creating a connection object: %s", err.Error())
 	}
@@ -1557,7 +1557,7 @@ func TestValidateDatabaseParameter(t *testing.T) {
 				parameters.Add(k, v)
 			}
 			newDSN += "?" + parameters.Encode()
-			db, err := sql.Open("snowflake", newDSN)
+			db, err := sql.Open("sigmacomputing+gosnowflake", newDSN)
 			// actual connection won't happen until run a query
 			if err != nil {
 				t.Fatalf("error creating a connection object: %s", err.Error())
@@ -1587,7 +1587,7 @@ func TestSpecifyWarehouseDatabase(t *testing.T) {
 	if protocol != "" {
 		parameters.Add("protocol", protocol)
 	}
-	db, err := sql.Open("snowflake", dsn+"?"+parameters.Encode())
+	db, err := sql.Open("sigmacomputing+gosnowflake", dsn+"?"+parameters.Encode())
 	if err != nil {
 		t.Fatalf("error creating a connection object: %s", err.Error())
 	}
@@ -1630,7 +1630,7 @@ func TestPingInvalidHost(t *testing.T) {
 		t.Fatalf("failed to parse config. config: %v, err: %v", config, err)
 	}
 
-	db, err := sql.Open("snowflake", testURL)
+	db, err := sql.Open("sigmacomputing+gosnowflake", testURL)
 	if err != nil {
 		t.Fatalf("failed to initalize the connetion. err: %v", err)
 	}
