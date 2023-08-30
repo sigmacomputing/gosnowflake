@@ -51,7 +51,7 @@ func main() {
 	ctx := sf.WithArrowAllocator(sf.WithArrowBatches(context.Background()), memory.DefaultAllocator)
 	query := "SELECT SEQ4(), 'example ' || (SEQ4() * 2) FROM TABLE(GENERATOR(ROWCOUNT=>30000))"
 
-	db, err := sql.Open("snowflake", dsn)
+	db, err := sql.Open("sigmacomputing+gosnowflake", dsn)
 	if err != nil {
 		log.Fatalf("failed to connect. %v, err: %v", dsn, err)
 	}

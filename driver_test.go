@@ -1511,7 +1511,7 @@ func TestValidateDatabaseParameter(t *testing.T) {
 				parameters.Add(k, v)
 			}
 			newDSN += "?" + parameters.Encode()
-			db, err := sql.Open("snowflake", newDSN)
+			db, err := sql.Open("sigmacomputing+gosnowflake", newDSN)
 			// actual connection won't happen until run a query
 			if err != nil {
 				t.Fatalf("error creating a connection object: %s", err.Error())
