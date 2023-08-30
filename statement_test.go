@@ -414,6 +414,10 @@ func TestWithQueryTag(t *testing.T) {
 	runDBTest(t, func(dbt *DBTest) {
 		testQueryTag := "TEST QUERY TAG"
 		ctx := WithQueryTag(context.Background(), testQueryTag)
+		ctx, fn := context.WithCancel(ctx)
+		// For whatever reason we have to cancel the context explicitly
+		// To prevent sql conn.Close() from hanging.
+		defer fn()
 
 		// This query itself will be part of the history and will have the query tag
 		rows := dbt.mustQueryContext(
