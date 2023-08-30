@@ -285,9 +285,9 @@ func (sc *snowflakeConn) getQueryResultResp(
 	// log when Success is false but body has data
 	if !respd.Success && respd.Code == "" && respd.Message == "" {
 		logger.WithContext(ctx).Errorf("Response body is non-empty but isSuccess is false")
-		logger.WithContext(ctx).Errorf("execResponseChunk len", len(respd.Data.Chunks))
-		logger.WithContext(ctx).Errorf("chunk ChunkHeaders len", respd.Data.ChunkHeaders)
-		logger.WithContext(ctx).Errorf("respd.Data ", respd.Data)
+		logger.WithContext(ctx).Errorf("execResponseChunk len %d", len(respd.Data.Chunks))
+		logger.WithContext(ctx).Errorf("ChunkHeaders %v", respd.Data.ChunkHeaders)
+		logger.WithContext(ctx).Errorf("respd.Data %v", respd.Data)
 	}
 
 	// log to get data points for sf to debug cache issue, should log only for staging org
