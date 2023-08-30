@@ -927,6 +927,9 @@ func TestDSN(t *testing.T) {
 	}
 	for _, test := range testcases {
 		dsn, err := DSN(test.cfg)
+		fmt.Println(test.dsn)
+		fmt.Println("Diff")
+		fmt.Println(dsn)
 		if test.err == nil && err == nil {
 			if dsn != test.dsn {
 				t.Errorf("failed to get DSN. expected: %v, got:\n %v", test.dsn, dsn)
