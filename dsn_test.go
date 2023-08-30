@@ -774,6 +774,7 @@ type tcDSN struct {
 
 func TestDSN(t *testing.T) {
 	tmfmt := "MM-DD-YYYY"
+	testConnectionID := "abcd-0123-4567-1234"
 	testcases := []tcDSN{
 		{
 			cfg: &Config{
@@ -1141,11 +1142,13 @@ func TestDSN(t *testing.T) {
 		},
 		{
 			cfg: &Config{
-				User:                     "u",
-				Password:                 "p",
-				Account:                  "a.e",
-				QueryMonitoringThreshold: 20 * time.Second,
-				ConnectionID:             testConnectionID,
+				User:     "u",
+				Password: "p",
+				Account:  "a.e",
+				MonitoringFetcher: MonitoringFetcherConfig{
+					QueryRuntimeThreshold: time.Second * 20,
+				},
+				ConnectionID: testConnectionID,
 			},
 			dsn: "u:p@a.e.snowflakecomputing.com:443?connectionId=abcd-0123-4567-1234&ocspFailOpen=true&queryMonitoringThreshold=20&region=e&validateDefaultParameters=true",
 		},

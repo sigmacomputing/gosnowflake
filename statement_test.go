@@ -187,9 +187,7 @@ func TestCallStatement(t *testing.T) {
 		in2 := string("[2,3]")
 		expected := "1 \"[2,3]\" [2,3]"
 		var out string
-
 		dbt.exec("ALTER SESSION SET USE_STATEMENT_TYPE_CALL_FOR_STORED_PROC_CALLS = true")
-
 		dbt.mustExec("create or replace procedure " +
 			"TEST_SP_CALL_STMT_ENABLED(in1 float, in2 variant) " +
 			"returns string language javascript as $$ " +
@@ -197,17 +195,19 @@ func TestCallStatement(t *testing.T) {
 			"res.next(); " +
 			"return res.getColumnValueAsString(1) + ' ' + res.getColumnValueAsString(2) + ' ' + IN2; " +
 			"$$;")
-
 		stmt, err := dbt.conn.PrepareContext(context.Background(), "call TEST_SP_CALL_STMT_ENABLED(?, to_variant(?))")
 		if err != nil {
-			t.Error(err)
+			dbt.Errorf("failed to prepare query: %v", err)
 		}
-		if !tag.Valid {
-			t.Fatal("no tag set")
+		defer stmt.Close()
+		err = stmt.QueryRow(in1, in2).Scan(&out)
+		if err != nil {
+			dbt.Errorf("failed to scan: %v", err)
 		}
-		if tag.String != testQueryTag {
-			t.Fatalf("expected tag '%s' but got '%s'", testQueryTag, tag.String)
+		if expected != out {
+			dbt.Errorf("expected: %s, got: %s", expected, out)
 		}
+		dbt.mustExec("drop procedure if exists TEST_SP_CALL_STMT_ENABLED(float, variant)")
 	})
 }
 

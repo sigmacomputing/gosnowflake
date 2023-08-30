@@ -95,7 +95,7 @@ func TestAsyncModeNoFetch(t *testing.T) {
 	// completes, so we make the test take longer than 45s
 	secondsToRun := 50
 
-	runTests(t, dsn, func(dbt *DBTest) {
+	runDBTest(t, func(dbt *DBTest) {
 		start := time.Now()
 		rows := dbt.mustQueryContext(ctx, fmt.Sprintf(selectTimelineGenerator, secondsToRun))
 		defer rows.Close()
@@ -191,11 +191,19 @@ func TestMultipleAsyncSuccessAndFailedQueries(t *testing.T) {
 	ch1 := make(chan string)
 	ch2 := make(chan string)
 
+	db := openDB(t)
+
 	runDBTest(t, func(dbt *DBTest) {
-		rows1 := dbt.mustQueryContext(ctx, fmt.Sprintf("select distinct '%s' from table (generator(timelimit=>3))", s1))
+		rows1, err := db.QueryContext(ctx, fmt.Sprintf("select distinct '%s' from table (generator(timelimit=>3))", s1))
+		if err != nil {
+			t.Fatalf("can't read rows1: %v", err)
+		}
 		defer rows1.Close()
 
-		rows2 := dbt.mustQueryContext(ctx, fmt.Sprintf("select distinct '%s' from table (generator(timelimit=>7))", s2))
+		rows2, err := db.QueryContext(ctx, fmt.Sprintf("select distinct '%s' from table (generator(timelimit=>7))", s2))
+		if err != nil {
+			t.Fatalf("can't read rows2: %v", err)
+		}
 		defer rows2.Close()
 
 		go retrieveRows(rows1, ch1)

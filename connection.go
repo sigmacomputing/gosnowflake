@@ -60,16 +60,17 @@ const (
 const privateLinkSuffix = "privatelink.snowflakecomputing.com"
 
 type snowflakeConn struct {
-	ctx             context.Context
-	cfg             *Config
-	rest            *snowflakeRestful
-	restMu          sync.RWMutex
-	SequenceCounter uint64
-	QueryID         string
-	SQLState        string
-	telemetry       *snowflakeTelemetry
-	internal        InternalClient
-	execRespCache   *execRespCache
+	ctx               context.Context
+	cfg               *Config
+	rest              *snowflakeRestful
+	restMu            sync.RWMutex
+	SequenceCounter   uint64
+	QueryID           string
+	SQLState          string
+	telemetry         *snowflakeTelemetry
+	internal          InternalClient
+	execRespCache     *execRespCache
+	queryContextCache *queryContextCache
 }
 
 var (
@@ -437,10 +438,15 @@ func (sc *snowflakeConn) Ping(ctx context.Context) error {
 // CheckNamedValue determines which types are handled by this driver aside from
 // the instances captured by driver.Value
 func (sc *snowflakeConn) CheckNamedValue(nv *driver.NamedValue) error {
-	if supportedNullBind(nv) || supportedArrayBind(nv) {
+	if _, ok := nv.Value.(SnowflakeDataType); ok {
+		// Pass SnowflakeDataType args through without modification so that we can
+		// distinguish them from arguments of type []byte
 		return nil
 	}
-	return driver.ErrSkip
+	if supported := supportedArrayBind(nv); !supported {
+		return driver.ErrSkip
+	}
+	return nil
 }
 
 func (sc *snowflakeConn) GetQueryStatus(

@@ -34,7 +34,7 @@ func TestClientTypeToInternal(t *testing.T) {
 	}
 	for _, ts := range testcases {
 		t.Run(fmt.Sprintf("%v_%v", ts.tp, ts.tmode), func(t *testing.T) {
-			tmode, err := dataTypeMode(ts.tp)
+			tmode, err := clientTypeToInternal(ts.tp)
 			if ts.err == nil {
 				if err != nil {
 					t.Errorf("failed to get datatype mode: %v", err)

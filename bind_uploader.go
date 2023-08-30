@@ -217,16 +217,16 @@ func getBindValues(bindings []driver.NamedValue) (map[string]execBindParameter, 
 	var dataType SnowflakeDataType
 	for _, binding := range bindings {
 		if tnt, ok := binding.Value.(TypedNullTime); ok {
-			tsmode = convertTzTypeToSnowflakeType(tnt.TzType)
+			dataType = convertTzTypeToSnowflakeType(tnt.TzType)
 			binding.Value = tnt.Time
 		}
 		switch binding.Value.(type) {
-		case snowflakeType:
+		case SnowflakeDataType:
 			// This binding is just specifying the type for subsequent bindings
-			tsmode = binding.Value.(snowflakeType)
+			dataType = binding.Value.(SnowflakeDataType)
 		default:
 			// This binding is an actual parameter for the query
-			t := goTypeToSnowflake(binding.Value, tsmode)
+			t := goTypeToSnowflake(binding.Value, dataType)
 			var val interface{}
 			if t == sliceType {
 				// retrieve array binding data
