@@ -117,15 +117,15 @@ func TestGoTypeToSnowflake(t *testing.T) {
 		{in: Array([]interface{}{time.Now()}, DateType), tmode: timestampNtzType, out: sliceType},
 		{in: Array([]interface{}{time.Now()}, TimeType), tmode: timestampTzType, out: sliceType},
 		// negative
-		{in: 123, tmode: nil, out: unSupportedType},
-		{in: int8(12), tmode: nil, out: unSupportedType},
-		{in: int32(456), tmode: nil, out: unSupportedType},
-		{in: uint(456), tmode: nil, out: unSupportedType},
-		{in: uint8(12), tmode: nil, out: unSupportedType},
-		{in: uint64(456), tmode: nil, out: unSupportedType},
-		{in: []byte{100}, tmode: nil, out: unSupportedType},
-		{in: nil, tmode: nil, out: unSupportedType},
-		{in: []int{1}, tmode: nil, out: unSupportedType},
+		{in: 123, tmode: nullType, out: unSupportedType},
+		{in: int8(12), tmode: nullType, out: unSupportedType},
+		{in: int32(456), tmode: nullType, out: unSupportedType},
+		{in: uint(456), tmode: nullType, out: unSupportedType},
+		{in: uint8(12), tmode: nullType, out: unSupportedType},
+		{in: uint64(456), tmode: nullType, out: unSupportedType},
+		{in: []byte{100}, tmode: nullType, out: unSupportedType},
+		{in: nil, tmode: nil, nullType: unSupportedType},
+		{in: []int{1}, tmode: nullType, out: unSupportedType},
 	}
 	for _, test := range testcases {
 		t.Run(fmt.Sprintf("%v_%v_%v", test.in, test.out, test.tmode), func(t *testing.T) {

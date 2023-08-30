@@ -293,7 +293,6 @@ func (sc *snowflakeConn) ExecContext(
 		} // last insert id is not supported by Snowflake
 
 		rows.monitoring = mkMonitoringFetcher(sc, data.Data.QueryID, time.Since(qStart))
-
 		return rows, nil
 	} else if isMultiStmt(&data.Data) {
 		rows, err := sc.handleMultiExec(ctx, data.Data)
@@ -438,12 +437,7 @@ func (sc *snowflakeConn) Ping(ctx context.Context) error {
 // CheckNamedValue determines which types are handled by this driver aside from
 // the instances captured by driver.Value
 func (sc *snowflakeConn) CheckNamedValue(nv *driver.NamedValue) error {
-	if _, ok := nv.Value.(SnowflakeDataType); ok {
-		// Pass SnowflakeDataType args through without modification so that we can
-		// distinguish them from arguments of type []byte
-		return nil
-	}
-	if supportedNullBind(nv) || supportedArrayBind(nv) {
+	iif supportedNullBind(nv) || supportedArrayBind(nv) {
 		return nil
 	}
 	return driver.ErrSkip

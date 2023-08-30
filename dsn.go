@@ -461,6 +461,7 @@ func fillMissingConfigParameters(cfg *Config) error {
 	if authRequiresPassword(cfg) && strings.TrimSpace(cfg.Password) == "" {
 		return errEmptyPassword()
 	}
+
 	if cfg.Authenticator != AuthTypeOAuth &&
 		cfg.Authenticator != AuthTypeTokenAccessor &&
 		strings.Trim(cfg.User, " ") == "" {

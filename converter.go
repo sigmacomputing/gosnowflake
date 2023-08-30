@@ -58,6 +58,7 @@ func isInterfaceArrayBinding(t interface{}) bool {
 
 // goTypeToSnowflake translates Go data type to Snowflake data type.
 func goTypeToSnowflake(v driver.Value, tsmode snowflakeType) snowflakeType {
+  // (raj) This will fail build. Reconcile after merge
 	if tsmode == nil {
 		switch t := v.(type) {
 		case int64, sql.NullInt64:
@@ -125,7 +126,7 @@ func snowflakeTypeToGo(dbtype snowflakeType, scale int64) reflect.Type {
 
 // valueToString converts arbitrary golang type to a string. This is mainly used in binding data with placeholders
 // in queries.
-func valueToString(v driver.Value, tsmode snowflakeType) (*string, error) {
+func valueToString(v driver.Value, dataType SnowflakeDataType) (*string, error) {
 	logger.Debugf("TYPE: %v, %v", reflect.TypeOf(v), reflect.ValueOf(v))
 	if v == nil {
 		return nil, nil
@@ -149,7 +150,7 @@ func valueToString(v driver.Value, tsmode snowflakeType) (*string, error) {
 			return nil, nil
 		}
 		if bd, ok := v.([]byte); ok {
-			if tsmode == binaryType {
+			if dataType != nil && dataType.Equals(DataTypeBinary) {
 				s := hex.EncodeToString(bd)
 				return &s, nil
 			}
