@@ -45,7 +45,15 @@ type snowflakeRows struct {
 	err                 error
 	errChannel          chan error
 	monitoring          *monitoringResult
+	location            *time.Location
 	asyncRequestID      UUID
+}
+
+func (rows *snowflakeRows) getLocation() *time.Location {
+	if rows.location == nil && rows.sc != nil && rows.sc.cfg != nil {
+		rows.location = getCurrentLocation(rows.sc.cfg.Params)
+	}
+	return rows.location
 }
 
 type snowflakeValue interface{}
@@ -233,11 +241,7 @@ func (rows *snowflakeRows) Next(dest []driver.Value) (err error) {
 		for i, n := 0, len(row.RowSet); i < n; i++ {
 			// could move to chunk downloader so that each go routine
 			// can convert data
-			var loc *time.Location
-			if rows.sc != nil {
-				loc = getCurrentLocation(rows.sc.cfg.Params)
-			}
-			err = stringToValue(&dest[i], rows.ChunkDownloader.getRowType()[i], row.RowSet[i], loc)
+			err = stringToValue(&dest[i], rows.ChunkDownloader.getRowType()[i], row.RowSet[i], rows.getLocation())
 			if err != nil {
 				return err
 			}

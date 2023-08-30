@@ -49,7 +49,7 @@ func putGetUserStage(t *testing.T, tmpDir string, numberOfFiles int, numberOfLin
 		files = filepath.Join(tmpDir, "file*")
 	}
 
-	runTests(t, dsn, func(dbt *DBTest) {
+	runDBTest(t, func(dbt *DBTest) {
 		stageName := fmt.Sprintf("%v_stage_%v_%v", dbname, numberOfFiles, numberOfLines)
 		sqlText := `create or replace table %v (aa int, dt date, ts timestamp,
 			tsltz timestamp_ltz, tsntz timestamp_ntz, tstz timestamp_tz,
@@ -57,7 +57,7 @@ func putGetUserStage(t *testing.T, tmpDir string, numberOfFiles int, numberOfLin
 		dbt.mustExec(fmt.Sprintf(sqlText, dbname))
 		userBucket := os.Getenv("SF_AWS_USER_BUCKET")
 		if userBucket == "" {
-			userBucket = fmt.Sprintf("sfc-dev1-regression/%v/reg", username)
+			userBucket = fmt.Sprintf("sfc-eng-regression/%v/reg", username)
 		}
 		sqlText = `create or replace stage %v url='s3://%v}/%v-%v-%v'
 			credentials = (AWS_KEY_ID='%v' AWS_SECRET_KEY='%v')`
@@ -69,7 +69,7 @@ func putGetUserStage(t *testing.T, tmpDir string, numberOfFiles int, numberOfLin
 		dbt.mustExec("rm @" + stageName)
 		var fs *os.File
 		if isStream {
-			fs, _ = os.OpenFile(files, os.O_RDONLY, os.ModePerm)
+			fs, _ = os.Open(files)
 			dbt.mustExecContext(WithFileStream(context.Background(), fs),
 				fmt.Sprintf("put 'file://%v' @%v", strings.ReplaceAll(
 					files, "\\", "\\\\"), stageName))
@@ -87,6 +87,7 @@ func putGetUserStage(t *testing.T, tmpDir string, numberOfFiles int, numberOfLin
 		dbt.mustExec(fmt.Sprintf("copy into %v from @%v", dbname, stageName))
 
 		rows := dbt.mustQuery("select count(*) from " + dbname)
+		defer rows.Close()
 		var cnt string
 		if rows.Next() {
 			rows.Scan(&cnt)
@@ -102,7 +103,7 @@ func putGetUserStage(t *testing.T, tmpDir string, numberOfFiles int, numberOfLin
 }
 
 func TestPutLoadFromUserStage(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runDBTest(t, func(dbt *DBTest) {
 		data, err := createTestData(dbt)
 		if err != nil {
 			t.Skip("snowflake admin account not accessible")
@@ -134,6 +135,7 @@ func TestPutLoadFromUserStage(t *testing.T) {
 		rows := dbt.mustQuery(fmt.Sprintf(`copy into gotest_putget_t2 from @%v
 			file_format = (field_delimiter = '|' error_on_column_count_mismatch
 			=false) purge=true`, data.stage))
+		defer rows.Close()
 		var s0, s1, s2, s3, s4, s5 string
 		var s6, s7, s8, s9 interface{}
 		orders100 := fmt.Sprintf("s3://%v/%v/orders_100.csv.gz",

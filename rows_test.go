@@ -56,8 +56,8 @@ var (
 
 // Special cases where rows are already closed
 func TestRowsClose(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		rows, err := dbt.db.Query("SELECT 1")
+	runDBTest(t, func(dbt *DBTest) {
+		rows, err := dbt.query("SELECT 1")
 		if err != nil {
 			dbt.Fatal(err)
 		}
@@ -76,8 +76,8 @@ func TestRowsClose(t *testing.T) {
 
 func TestResultNoRows(t *testing.T) {
 	// DDL
-	runTests(t, dsn, func(dbt *DBTest) {
-		row, err := dbt.db.Exec("CREATE OR REPLACE TABLE test(c1 int)")
+	runDBTest(t, func(dbt *DBTest) {
+		row, err := dbt.exec("CREATE OR REPLACE TABLE test(c1 int)")
 		if err != nil {
 			t.Fatalf("failed to execute DDL. err: %v", err)
 		}
@@ -448,4 +448,72 @@ func TestDownloadChunkErrorStatus(t *testing.T) {
 	default:
 		t.Fatal("should have caused an error and queued in scd.ChunksError")
 	}
+}
+
+func TestWithArrowBatchesNotImplementedForResult(t *testing.T) {
+	ctx := WithArrowBatches(context.Background())
+	config, err := ParseDSN(dsn)
+	if err != nil {
+		t.Error(err)
+	}
+	sc, err := buildSnowflakeConn(ctx, *config)
+	if err != nil {
+		t.Error(err)
+	}
+	defer sc.Close()
+	if err = authenticateWithConfig(sc); err != nil {
+		t.Error(err)
+	}
+
+	if _, err = sc.Exec("create or replace table testArrowBatches (a int, b int)", nil); err != nil {
+		t.Fatal(err)
+	}
+	defer sc.Exec("drop table if exists testArrowBatches", nil)
+
+	result, err := sc.ExecContext(ctx, "insert into testArrowBatches values (1, 2), (3, 4), (5, 6)", []driver.NamedValue{})
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = result.(*snowflakeResult).GetArrowBatches()
+	if err == nil {
+		t.Fatal("should have raised an error")
+	}
+	driverErr, ok := err.(*SnowflakeError)
+	if !ok {
+		t.Fatalf("should be snowflake error. err: %v", err)
+	}
+	if driverErr.Number != ErrNotImplemented {
+		t.Fatalf("unexpected error code. expected: %v, got: %v", ErrNotImplemented, driverErr.Number)
+	}
+}
+
+func TestLocationChangesAfterAlterSession(t *testing.T) {
+	runDBTest(t, func(dbt *DBTest) {
+		dbt.mustExec("CREATE OR REPLACE TABLE location_timestamp_ltz (val timestamp_ltz)")
+		defer dbt.mustExec("DROP TABLE location_timestamp_ltz")
+		dbt.mustExec("ALTER SESSION SET TIMEZONE = 'Europe/Warsaw'")
+		dbt.mustExec("INSERT INTO location_timestamp_ltz VALUES('2023-08-09 10:00:00')")
+		rows1 := dbt.mustQuery("SELECT * FROM location_timestamp_ltz")
+		defer rows1.Close()
+		if !rows1.Next() {
+			t.Fatalf("cannot read a record")
+		}
+		var t1 time.Time
+		rows1.Scan(&t1)
+		if t1.Location().String() != "Europe/Warsaw" {
+			t.Fatalf("should return time in Warsaw timezone")
+		}
+		dbt.mustExec("ALTER SESSION SET TIMEZONE = 'Pacific/Honolulu'")
+		rows2 := dbt.mustQuery("SELECT * FROM location_timestamp_ltz")
+		defer rows2.Close()
+		if !rows2.Next() {
+			t.Fatalf("cannot read a record")
+		}
+		var t2 time.Time
+		rows2.Scan(&t2)
+		if t2.Location().String() != "Pacific/Honolulu" {
+			t.Fatalf("should return time in Honolulu timezone")
+		}
+	})
 }

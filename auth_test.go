@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"runtime"
@@ -22,54 +23,57 @@ import (
 func TestUnitPostAuth(t *testing.T) {
 	sr := &snowflakeRestful{
 		TokenAccessor: getSimpleTokenAccessor(),
-		FuncPost:      postTestAfterRenew,
+		FuncAuthPost:  postAuthTestAfterRenew,
 	}
 	var err error
-	_, err = postAuth(context.TODO(), sr, &url.Values{}, make(map[string]string), []byte{0x12, 0x34}, 0)
+	bodyCreator := func() ([]byte, error) {
+		return []byte{0x12, 0x34}, nil
+	}
+	_, err = postAuth(context.TODO(), sr, sr.Client, &url.Values{}, make(map[string]string), bodyCreator, 0)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	sr.FuncPost = postTestError
-	_, err = postAuth(context.TODO(), sr, &url.Values{}, make(map[string]string), []byte{0x12, 0x34}, 0)
+	sr.FuncAuthPost = postAuthTestError
+	_, err = postAuth(context.TODO(), sr, sr.Client, &url.Values{}, make(map[string]string), bodyCreator, 0)
 	if err == nil {
 		t.Fatal("should have failed to auth for unknown reason")
 	}
-	sr.FuncPost = postTestAppBadGatewayError
-	_, err = postAuth(context.TODO(), sr, &url.Values{}, make(map[string]string), []byte{0x12, 0x34}, 0)
+	sr.FuncAuthPost = postAuthTestAppBadGatewayError
+	_, err = postAuth(context.TODO(), sr, sr.Client, &url.Values{}, make(map[string]string), bodyCreator, 0)
 	if err == nil {
 		t.Fatal("should have failed to auth for unknown reason")
 	}
-	sr.FuncPost = postTestAppForbiddenError
-	_, err = postAuth(context.TODO(), sr, &url.Values{}, make(map[string]string), []byte{0x12, 0x34}, 0)
+	sr.FuncAuthPost = postAuthTestAppForbiddenError
+	_, err = postAuth(context.TODO(), sr, sr.Client, &url.Values{}, make(map[string]string), bodyCreator, 0)
 	if err == nil {
 		t.Fatal("should have failed to auth for unknown reason")
 	}
-	sr.FuncPost = postTestAppUnexpectedError
-	_, err = postAuth(context.TODO(), sr, &url.Values{}, make(map[string]string), []byte{0x12, 0x34}, 0)
+	sr.FuncAuthPost = postAuthTestAppUnexpectedError
+	_, err = postAuth(context.TODO(), sr, sr.Client, &url.Values{}, make(map[string]string), bodyCreator, 0)
 	if err == nil {
 		t.Fatal("should have failed to auth for unknown reason")
 	}
 }
 
-func postAuthFailServiceIssue(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, _ []byte, _ time.Duration) (*authResponse, error) {
+func postAuthFailServiceIssue(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, _ bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	return nil, &SnowflakeError{
 		Number: ErrCodeServiceUnavailable,
 	}
 }
 
-func postAuthFailWrongAccount(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, _ []byte, _ time.Duration) (*authResponse, error) {
+func postAuthFailWrongAccount(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, _ bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	return nil, &SnowflakeError{
 		Number: ErrCodeFailedToConnect,
 	}
 }
 
-func postAuthFailUnknown(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, _ []byte, _ time.Duration) (*authResponse, error) {
+func postAuthFailUnknown(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, _ bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	return nil, &SnowflakeError{
 		Number: ErrFailedToAuth,
 	}
 }
 
-func postAuthSuccessWithErrorCode(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, _ []byte, _ time.Duration) (*authResponse, error) {
+func postAuthSuccessWithErrorCode(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, _ bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	return &authResponse{
 		Success: false,
 		Code:    "98765",
@@ -77,7 +81,7 @@ func postAuthSuccessWithErrorCode(_ context.Context, _ *snowflakeRestful, _ *url
 	}, nil
 }
 
-func postAuthSuccessWithInvalidErrorCode(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, _ []byte, _ time.Duration) (*authResponse, error) {
+func postAuthSuccessWithInvalidErrorCode(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, _ bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	return &authResponse{
 		Success: false,
 		Code:    "abcdef",
@@ -85,7 +89,7 @@ func postAuthSuccessWithInvalidErrorCode(_ context.Context, _ *snowflakeRestful,
 	}, nil
 }
 
-func postAuthSuccess(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, _ []byte, _ time.Duration) (*authResponse, error) {
+func postAuthSuccess(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, _ bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	return &authResponse{
 		Success: true,
 		Data: authResponseMain{
@@ -98,8 +102,9 @@ func postAuthSuccess(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ ma
 	}, nil
 }
 
-func postAuthCheckSAMLResponse(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, jsonBody []byte, _ time.Duration) (*authResponse, error) {
+func postAuthCheckSAMLResponse(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	var ar authRequest
+	jsonBody, _ := bodyCreator()
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
@@ -123,10 +128,12 @@ func postAuthCheckSAMLResponse(_ context.Context, _ *snowflakeRestful, _ *url.Va
 func postAuthCheckOAuth(
 	_ context.Context,
 	_ *snowflakeRestful,
+	_ *http.Client,
 	_ *url.Values, _ map[string]string,
-	jsonBody []byte,
+	bodyCreator bodyCreatorType,
 	_ time.Duration) (*authResponse, error) {
 	var ar authRequest
+	jsonBody, _ := bodyCreator()
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
@@ -151,8 +158,9 @@ func postAuthCheckOAuth(
 	}, nil
 }
 
-func postAuthCheckPasscode(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, jsonBody []byte, _ time.Duration) (*authResponse, error) {
+func postAuthCheckPasscode(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	var ar authRequest
+	jsonBody, _ := bodyCreator()
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
@@ -171,8 +179,9 @@ func postAuthCheckPasscode(_ context.Context, _ *snowflakeRestful, _ *url.Values
 	}, nil
 }
 
-func postAuthCheckPasscodeInPassword(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, jsonBody []byte, _ time.Duration) (*authResponse, error) {
+func postAuthCheckPasscodeInPassword(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	var ar authRequest
+	jsonBody, _ := bodyCreator()
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
@@ -193,8 +202,9 @@ func postAuthCheckPasscodeInPassword(_ context.Context, _ *snowflakeRestful, _ *
 
 // JWT token validate callback function to check the JWT token
 // It uses the public key paired with the testPrivKey
-func postAuthCheckJWTToken(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, jsonBody []byte, _ time.Duration) (*authResponse, error) {
+func postAuthCheckJWTToken(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	var ar authRequest
+	jsonBody, _ := bodyCreator()
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
@@ -229,8 +239,9 @@ func postAuthCheckJWTToken(_ context.Context, _ *snowflakeRestful, _ *url.Values
 	}, nil
 }
 
-func postAuthCheckUsernamePasswordMfa(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, jsonBody []byte, _ time.Duration) (*authResponse, error) {
+func postAuthCheckUsernamePasswordMfa(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	var ar authRequest
+	jsonBody, _ := bodyCreator()
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
@@ -251,8 +262,50 @@ func postAuthCheckUsernamePasswordMfa(_ context.Context, _ *snowflakeRestful, _ 
 	}, nil
 }
 
-func postAuthCheckExternalBrowser(_ context.Context, _ *snowflakeRestful, _ *url.Values, _ map[string]string, jsonBody []byte, _ time.Duration) (*authResponse, error) {
+func postAuthCheckUsernamePasswordMfaToken(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
 	var ar authRequest
+	jsonBody, _ := bodyCreator()
+	if err := json.Unmarshal(jsonBody, &ar); err != nil {
+		return nil, err
+	}
+
+	if ar.Data.Token != "mockedMfaToken" {
+		return nil, fmt.Errorf("unexpected mfa token: %v", ar.Data.Token)
+	}
+	return &authResponse{
+		Success: true,
+		Data: authResponseMain{
+			Token:       "t",
+			MasterToken: "m",
+			MfaToken:    "mockedMfaToken",
+			SessionInfo: authResponseSessionInfo{
+				DatabaseName: "dbn",
+			},
+		},
+	}, nil
+}
+
+func postAuthCheckUsernamePasswordMfaFailed(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
+	var ar authRequest
+	jsonBody, _ := bodyCreator()
+	if err := json.Unmarshal(jsonBody, &ar); err != nil {
+		return nil, err
+	}
+
+	if ar.Data.Token != "mockedMfaToken" {
+		return nil, fmt.Errorf("unexpected mfa token: %v", ar.Data.Token)
+	}
+	return &authResponse{
+		Success: false,
+		Data:    authResponseMain{},
+		Message: "auth failed",
+		Code:    "260008",
+	}, nil
+}
+
+func postAuthCheckExternalBrowser(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
+	var ar authRequest
+	jsonBody, _ := bodyCreator()
 	if err := json.Unmarshal(jsonBody, &ar); err != nil {
 		return nil, err
 	}
@@ -270,6 +323,47 @@ func postAuthCheckExternalBrowser(_ context.Context, _ *snowflakeRestful, _ *url
 				DatabaseName: "dbn",
 			},
 		},
+	}, nil
+}
+
+func postAuthCheckExternalBrowserToken(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
+	var ar authRequest
+	jsonBody, _ := bodyCreator()
+	if err := json.Unmarshal(jsonBody, &ar); err != nil {
+		return nil, err
+	}
+
+	if ar.Data.Token != "mockedIDToken" {
+		return nil, fmt.Errorf("unexpected mfatoken: %v", ar.Data.Token)
+	}
+	return &authResponse{
+		Success: true,
+		Data: authResponseMain{
+			Token:       "t",
+			MasterToken: "m",
+			IDToken:     "mockedIDToken",
+			SessionInfo: authResponseSessionInfo{
+				DatabaseName: "dbn",
+			},
+		},
+	}, nil
+}
+
+func postAuthCheckExternalBrowserFailed(_ context.Context, _ *snowflakeRestful, _ *http.Client, _ *url.Values, _ map[string]string, bodyCreator bodyCreatorType, _ time.Duration) (*authResponse, error) {
+	var ar authRequest
+	jsonBody, _ := bodyCreator()
+	if err := json.Unmarshal(jsonBody, &ar); err != nil {
+		return nil, err
+	}
+
+	if ar.Data.SessionParameters["CLIENT_STORE_TEMPORARY_CREDENTIAL"] != true {
+		return nil, fmt.Errorf("expected client_store_temporary_credential to be true but was %v", ar.Data.SessionParameters["CLIENT_STORE_TEMPORARY_CREDENTIAL"])
+	}
+	return &authResponse{
+		Success: false,
+		Data:    authResponseMain{},
+		Message: "auth failed",
+		Code:    "260008",
 	}, nil
 }
 
@@ -531,6 +625,36 @@ func TestUnitAuthenticateUsernamePasswordMfa(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to run. err: %v", err)
 	}
+
+	sr.FuncPostAuth = postAuthCheckUsernamePasswordMfaToken
+	sc.cfg.MfaToken = "mockedMfaToken"
+	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
+	if err != nil {
+		t.Fatalf("failed to run. err: %v", err)
+	}
+
+	sr.FuncPostAuth = postAuthCheckUsernamePasswordMfaFailed
+	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestUnitAuthenticateWithConfigMFA(t *testing.T) {
+	var err error
+	sr := &snowflakeRestful{
+		FuncPostAuth:  postAuthCheckUsernamePasswordMfa,
+		TokenAccessor: getSimpleTokenAccessor(),
+	}
+	sc := getDefaultSnowflakeConn()
+	sc.cfg.Authenticator = AuthTypeUsernamePasswordMFA
+	sc.cfg.ClientRequestMfaToken = ConfigBoolTrue
+	sc.rest = sr
+	sc.ctx = context.TODO()
+	err = authenticateWithConfig(sc)
+	if err != nil {
+		t.Fatalf("failed to run. err: %v", err)
+	}
 }
 
 func TestUnitAuthenticateExternalBrowser(t *testing.T) {
@@ -546,6 +670,19 @@ func TestUnitAuthenticateExternalBrowser(t *testing.T) {
 	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
 	if err != nil {
 		t.Fatalf("failed to run. err: %v", err)
+	}
+
+	sr.FuncPostAuth = postAuthCheckExternalBrowserToken
+	sc.cfg.IDToken = "mockedIDToken"
+	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
+	if err != nil {
+		t.Fatalf("failed to run. err: %v", err)
+	}
+
+	sr.FuncPostAuth = postAuthCheckExternalBrowserFailed
+	_, err = authenticate(context.TODO(), sc, []byte{}, []byte{})
+	if err == nil {
+		t.Fatal("should have failed")
 	}
 }
 

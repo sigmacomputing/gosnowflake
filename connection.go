@@ -60,16 +60,17 @@ const (
 const privateLinkSuffix = "privatelink.snowflakecomputing.com"
 
 type snowflakeConn struct {
-	ctx             context.Context
-	cfg             *Config
-	rest            *snowflakeRestful
-	restMu          sync.RWMutex // guard shutdown race
-	SequenceCounter uint64
-	QueryID         string
-	SQLState        string
-	telemetry       *snowflakeTelemetry
-	internal        InternalClient
-	execRespCache   *execRespCache
+	ctx               context.Context
+	cfg               *Config
+	rest              *snowflakeRestful
+	restMu            sync.RWMutex
+	SequenceCounter   uint64
+	QueryID           string
+	SQLState          string
+	telemetry         *snowflakeTelemetry
+	internal          InternalClient
+	execRespCache     *execRespCache
+	queryContextCache *queryContextCache
 }
 
 var (
@@ -143,8 +144,11 @@ func (sc *snowflakeConn) exec(
 	}
 	logger.WithContext(ctx).Infof("Success: %v, Code: %v", data.Success, code)
 	if !data.Success {
-		return nil, (populateErrorFields(code, data)).exceptionTelemetry(sc)
+		err = (populateErrorFields(code, data)).exceptionTelemetry(sc)
+		return nil, err
 	}
+
+	sc.queryContextCache.add(data.Data.QueryContext.Entries...)
 
 	// handle PUT/GET commands
 	if isFileTransfer(query) {
@@ -159,8 +163,6 @@ func (sc *snowflakeConn) exec(
 	sc.cfg.Schema = data.Data.FinalSchemaName
 	sc.cfg.Role = data.Data.FinalRoleName
 	sc.cfg.Warehouse = data.Data.FinalWarehouseName
-	sc.QueryID = data.Data.QueryID
-	sc.SQLState = data.Data.SQLState
 	sc.populateSessionParameters(data.Data.Parameters)
 	return data, err
 }
@@ -196,7 +198,7 @@ func (sc *snowflakeConn) BeginTx(
 		false /* isInternal */, isDesc, nil); err != nil {
 		return nil, err
 	}
-	return &snowflakeTx{sc}, nil
+	return &snowflakeTx{sc, ctx}, nil
 }
 
 func (sc *snowflakeConn) cleanup() {
@@ -219,7 +221,7 @@ func (sc *snowflakeConn) Close() (err error) {
 	sc.stopHeartBeat()
 	defer sc.cleanup()
 
-	if !sc.cfg.KeepSessionAlive {
+	if sc.cfg != nil && !sc.cfg.KeepSessionAlive {
 		if err = sc.rest.FuncCloseSession(sc.ctx, sc.rest, sc.rest.RequestTimeout); err != nil {
 			logger.Error(err)
 		}
@@ -259,9 +261,9 @@ func (sc *snowflakeConn) ExecContext(
 	if err != nil {
 		logger.WithContext(ctx).Infof("error: %v", err)
 		if data != nil {
-			code, err := strconv.Atoi(data.Code)
-			if err != nil {
-				return nil, err
+			code, e := strconv.Atoi(data.Code)
+			if e != nil {
+				return nil, e
 			}
 			return nil, (&SnowflakeError{
 				Number:   code,
@@ -288,11 +290,10 @@ func (sc *snowflakeConn) ExecContext(
 		rows := &snowflakeResult{
 			affectedRows: updatedRows,
 			insertID:     -1,
-			queryID:      sc.QueryID,
+			queryID:      data.Data.QueryID,
 		} // last insert id is not supported by Snowflake
 
-		rows.monitoring = mkMonitoringFetcher(sc, sc.QueryID, time.Since(qStart))
-
+		rows.monitoring = mkMonitoringFetcher(sc, data.Data.QueryID, time.Since(qStart))
 		return rows, nil
 	} else if isMultiStmt(&data.Data) {
 		rows, err := sc.handleMultiExec(ctx, data.Data)
@@ -348,9 +349,9 @@ func (sc *snowflakeConn) queryContextInternal(
 	if err != nil {
 		logger.WithContext(ctx).Errorf("error: %v", err)
 		if data != nil {
-			code, err := strconv.Atoi(data.Code)
-			if err != nil {
-				return nil, err
+			code, e := strconv.Atoi(data.Code)
+			if e != nil {
+				return nil, e
 			}
 			return nil, (&SnowflakeError{
 				Number:   code,
@@ -369,8 +370,8 @@ func (sc *snowflakeConn) queryContextInternal(
 
 	rows := new(snowflakeRows)
 	rows.sc = sc
-	rows.queryID = sc.QueryID
-	rows.monitoring = mkMonitoringFetcher(sc, sc.QueryID, time.Since(qStart))
+	rows.queryID = data.Data.QueryID
+	rows.monitoring = mkMonitoringFetcher(sc, data.Data.QueryID, time.Since(qStart))
 
 	if isSubmitSync(ctx) && data.Code == queryInProgressCode {
 		rows.status = QueryStatusInProgress
@@ -442,10 +443,10 @@ func (sc *snowflakeConn) CheckNamedValue(nv *driver.NamedValue) error {
 		// distinguish them from arguments of type []byte
 		return nil
 	}
-	if supported := supportedArrayBind(nv); !supported {
-		return driver.ErrSkip
+	if supportedNullBind(nv) || supportedArrayBind(nv) {
+		return nil
 	}
-	return nil
+	return driver.ErrSkip
 }
 
 func (sc *snowflakeConn) GetQueryStatus(
@@ -479,9 +480,9 @@ func (sc *snowflakeConn) QueryArrowStream(ctx context.Context, query string, bin
 	if err != nil {
 		logger.WithContext(ctx).Errorf("error: %v", err)
 		if data != nil {
-			code, err := strconv.Atoi(data.Code)
-			if err != nil {
-				return nil, err
+			code, e := strconv.Atoi(data.Code)
+			if e != nil {
+				return nil, e
 			}
 			return nil, (&SnowflakeError{
 				Number:   code,
@@ -619,11 +620,18 @@ func (asb *ArrowStreamBatch) GetStream(ctx context.Context) (io.ReadCloser, erro
 
 // ArrowStreamLoader is a convenience interface for downloading
 // Snowflake results via multiple Arrow Record Batch streams.
+//
+// Some queries from Snowflake do not return Arrow data regardless
+// of the settings, such as "SHOW WAREHOUSES". In these cases,
+// you'll find TotalRows() > 0 but GetBatches returns no batches
+// and no errors. In this case, the data is accessible via JSONData
+// with the actual types matching up to the metadata in RowTypes.
 type ArrowStreamLoader interface {
 	GetBatches() ([]ArrowStreamBatch, error)
 	TotalRows() int64
 	RowTypes() []execResponseRowType
 	Location() *time.Location
+	JSONData() [][]*string
 }
 
 type snowflakeArrowStreamChunkDownloader struct {
@@ -645,6 +653,9 @@ func (scd *snowflakeArrowStreamChunkDownloader) Location() *time.Location {
 func (scd *snowflakeArrowStreamChunkDownloader) TotalRows() int64 { return scd.Total }
 func (scd *snowflakeArrowStreamChunkDownloader) RowTypes() []execResponseRowType {
 	return scd.RowSet.RowType
+}
+func (scd *snowflakeArrowStreamChunkDownloader) JSONData() [][]*string {
+	return scd.RowSet.JSON
 }
 
 // the server might have had an empty first batch, check if we can decode
@@ -714,9 +725,10 @@ func (scd *snowflakeArrowStreamChunkDownloader) GetBatches() (out []ArrowStreamB
 
 func buildSnowflakeConn(ctx context.Context, config Config) (*snowflakeConn, error) {
 	sc := &snowflakeConn{
-		SequenceCounter: 0,
-		ctx:             ctx,
-		cfg:             &config,
+		SequenceCounter:   0,
+		ctx:               ctx,
+		cfg:               &config,
+		queryContextCache: (&queryContextCache{}).init(),
 	}
 	var st http.RoundTripper = SnowflakeTransport
 	if sc.cfg.Transporter == nil {
@@ -765,11 +777,16 @@ func buildSnowflakeConn(ctx context.Context, config Config) (*snowflakeConn, err
 			Timeout:   sc.cfg.ClientTimeout,
 			Transport: st,
 		},
+		JWTClient: &http.Client{
+			Timeout:   sc.cfg.JWTClientTimeout,
+			Transport: st,
+		},
 		TokenAccessor:       tokenAccessor,
 		LoginTimeout:        sc.cfg.LoginTimeout,
 		RequestTimeout:      sc.cfg.RequestTimeout,
 		FuncPost:            postRestful,
 		FuncGet:             getRestful,
+		FuncAuthPost:        postAuthRestful,
 		FuncPostQuery:       postRestfulQuery,
 		FuncPostQueryHelper: postRestfulQueryHelper,
 		FuncRenewSession:    renewRestfulSession,
