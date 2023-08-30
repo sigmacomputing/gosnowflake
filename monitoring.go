@@ -286,6 +286,7 @@ func (sc *snowflakeConn) getQueryResultResp(
 	if !respd.Success && respd.Code == "" && respd.Message == "" {
 		logger.WithContext(ctx).Errorf("Response body is non-empty but isSuccess is false")
 		logger.WithContext(ctx).Errorf("execResponseChunk len", len(respd.Data.Chunks))
+		logger.WithContext(ctx).Errorf("chunk ChunkHeaders len", respd.Data.ChunkHeaders)
 		logger.WithContext(ctx).Errorf("respd.Data ", respd.Data)
 	}
 
