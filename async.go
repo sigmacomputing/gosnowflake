@@ -75,7 +75,6 @@ func (sr *snowflakeRestful) getAsync(
 	defer close(errChannel)
 	token, _, _ := sr.TokenAccessor.GetTokens()
 	headers[headerAuthorizationKey] = fmt.Sprintf(headerSnowflakeToken, token)
-
 	// the get call pulling for result status is
 	var response *execResponse
 	var err error

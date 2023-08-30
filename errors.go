@@ -66,7 +66,7 @@ func (se *SnowflakeError) generateTelemetryExceptionData() *telemetryData {
 }
 
 func (se *SnowflakeError) sendExceptionTelemetry(sc *snowflakeConn, data *telemetryData) error {
-	if sc != nil {
+	if sc != nil && sc.telemetry != nil {
 		return sc.telemetry.addLog(data)
 	}
 	return nil // TODO oob telemetry
@@ -82,7 +82,7 @@ func (se *SnowflakeError) exceptionTelemetry(sc *snowflakeConn) *SnowflakeError 
 
 // return populated error fields replacing the default response
 func populateErrorFields(code int, data *execResponse) *SnowflakeError {
-	err := ErrUnknownError
+	err := errUnknownError()
 	if code != -1 {
 		err.Number = code
 	}
@@ -299,32 +299,44 @@ const (
 	errMsgAsyncWithNoResults                 = "async with no results"
 )
 
-var (
-	// ErrEmptyAccount is returned if a DNS doesn't include account parameter.
-	ErrEmptyAccount = &SnowflakeError{
+// Returned if a DNS doesn't include account parameter.
+func errEmptyAccount() *SnowflakeError {
+	return &SnowflakeError{
 		Number:  ErrCodeEmptyAccountCode,
 		Message: "account is empty",
 	}
-	// ErrEmptyUsername is returned if a DNS doesn't include user parameter.
-	ErrEmptyUsername = &SnowflakeError{
+}
+
+// Returned if a DNS doesn't include user parameter.
+func errEmptyUsername() *SnowflakeError {
+	return &SnowflakeError{
 		Number:  ErrCodeEmptyUsernameCode,
 		Message: "user is empty",
 	}
-	// ErrEmptyPassword is returned if a DNS doesn't include password parameter.
-	ErrEmptyPassword = &SnowflakeError{
+}
+
+// Returned if a DNS doesn't include password parameter.
+func errEmptyPassword() *SnowflakeError {
+	return &SnowflakeError{
 		Number:  ErrCodeEmptyPasswordCode,
-		Message: "password is empty"}
+		Message: "password is empty",
+	}
+}
 
-	// ErrInvalidRegion is returned if a DSN's implicit region from account parameter and explicit region parameter conflict.
-	ErrInvalidRegion = &SnowflakeError{
+// Returned if a DSN's implicit region from account parameter and explicit region parameter conflict.
+func errInvalidRegion() *SnowflakeError {
+	return &SnowflakeError{
 		Number:  ErrCodeRegionOverlap,
-		Message: "two regions specified"}
+		Message: "two regions specified",
+	}
+}
 
-	// ErrUnknownError is returned if the server side returns an error without meaningful message.
-	ErrUnknownError = &SnowflakeError{
+// Returned if the server side returns an error without meaningful message.
+func errUnknownError() *SnowflakeError {
+	return &SnowflakeError{
 		Number:   -1,
 		SQLState: "-1",
 		Message:  "an unknown server side error occurred",
 		QueryID:  "-1",
 	}
-)
+}

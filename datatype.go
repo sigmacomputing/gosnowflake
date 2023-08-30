@@ -5,6 +5,7 @@ package gosnowflake
 import (
 	"bytes"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 )
 
@@ -31,27 +32,48 @@ const (
 	unSupportedType
 )
 
-var snowflakeTypes = [...]string{"FIXED", "REAL", "TEXT", "DATE", "VARIANT",
-	"TIMESTAMP_LTZ", "TIMESTAMP_NTZ", "TIMESTAMP_TZ", "OBJECT", "ARRAY",
-	"BINARY", "TIME", "BOOLEAN", "NULL", "SLICE", "CHANGE_TYPE", "NOT_SUPPORTED"}
+var snowflakeToDriverType = map[string]snowflakeType{
+	"FIXED":         fixedType,
+	"REAL":          realType,
+	"TEXT":          textType,
+	"DATE":          dateType,
+	"VARIANT":       variantType,
+	"TIMESTAMP_LTZ": timestampLtzType,
+	"TIMESTAMP_NTZ": timestampNtzType,
+	"TIMESTAMP_TZ":  timestampTzType,
+	"OBJECT":        objectType,
+	"ARRAY":         arrayType,
+	"BINARY":        binaryType,
+	"TIME":          timeType,
+	"BOOLEAN":       booleanType,
+	"NULL":          nullType,
+	"SLICE":         sliceType,
+	"CHANGE_TYPE":   changeType,
+	"NOT_SUPPORTED": unSupportedType}
 
-func (st snowflakeType) String() string {
-	return snowflakeTypes[st]
+var driverTypeToSnowflake = invertMap(snowflakeToDriverType)
+
+func invertMap(m map[string]snowflakeType) map[snowflakeType]string {
+	inv := make(map[snowflakeType]string)
+	for k, v := range m {
+		if _, ok := inv[v]; ok {
+			panic("failed to create driverTypeToSnowflake map due to duplicated values")
+		}
+		inv[v] = k
+	}
+	return inv
 }
 
 func (st snowflakeType) Byte() byte {
 	return byte(st)
 }
 
+func (st snowflakeType) String() string {
+	return driverTypeToSnowflake[st]
+}
+
 func getSnowflakeType(typ string) snowflakeType {
-	for i, sft := range snowflakeTypes {
-		if sft == typ {
-			return snowflakeType(i)
-		} else if snowflakeType(i) == nullType {
-			break
-		}
-	}
-	return nullType
+	return snowflakeToDriverType[typ]
 }
 
 // SnowflakeDataType is the type used by clients to explicitly indicate the type
@@ -134,6 +156,31 @@ func clientTypeToInternal(cType SnowflakeDataType) (iType snowflakeType, err err
 		return nullType, fmt.Errorf(errMsgInvalidByteArray, nil)
 	}
 	return iType, nil
+}
+
+// dataTypeMode returns the subsequent data type in a string representation.
+func dataTypeMode(v driver.Value) (tsmode snowflakeType, err error) {
+	if bd, ok := v.([]byte); ok {
+		switch {
+		case bytes.Equal(bd, DataTypeDate):
+			tsmode = dateType
+		case bytes.Equal(bd, DataTypeTime):
+			tsmode = timeType
+		case bytes.Equal(bd, DataTypeTimestampLtz):
+			tsmode = timestampLtzType
+		case bytes.Equal(bd, DataTypeTimestampNtz):
+			tsmode = timestampNtzType
+		case bytes.Equal(bd, DataTypeTimestampTz):
+			tsmode = timestampTzType
+		case bytes.Equal(bd, DataTypeBinary):
+			tsmode = binaryType
+		default:
+			return nullType, fmt.Errorf(errMsgInvalidByteArray, v)
+		}
+	} else {
+		return nullType, fmt.Errorf(errMsgInvalidByteArray, v)
+	}
+	return tsmode, nil
 }
 
 // SnowflakeParameter includes the columns output from SHOW PARAMETER command.

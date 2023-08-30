@@ -19,7 +19,6 @@ on:
         required: true
       tags:
         description: "Test scenario tags"
-
 jobs:
   build-test-linux:
     environment: gosnowflake-ci-env
