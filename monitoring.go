@@ -289,6 +289,7 @@ func (sc *snowflakeConn) getQueryResultResp(
 
 	// log to get data points for sf to debug cache issue, should log only for staging org
 	if shouldLogSfResponseForCacheBug(ctx) {
+		logger.WithContext(ctx).Errorf("request url: %s, headers: %v", url, headers)
 		logHeader, errHeader := json.Marshal(res.Header)
 		if errHeader != nil {
 			logger.WithContext(ctx).Errorf("failed to read header from result header. errHeader: %v", errHeader)
