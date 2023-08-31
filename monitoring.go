@@ -289,6 +289,7 @@ func (sc *snowflakeConn) getQueryResultResp(
 
 	// log to get data points for sf to debug cache issue, should log only for staging org
 	if shouldLogSfResponseForCacheBug(ctx) {
+		logger.WithContext(ctx).Errorf("request url: %s, headers: %v", url, headers)
 		logHeader, errHeader := json.Marshal(res.Header)
 		if errHeader != nil {
 			logger.WithContext(ctx).Errorf("failed to read header from result header. errHeader: %v", errHeader)
@@ -297,7 +298,6 @@ func (sc *snowflakeConn) getQueryResultResp(
 		// log for debugging header and response when Success is false but body has data
 		if !respd.Success && respd.Code == "" && respd.Message == "" {
 			logger.WithContext(ctx).Errorf("failed to build a proper exec response. received body: %s with header %s", string(bodyBytes), string(logHeader))
-			logger.WithContext(ctx).Errorf("request url: %s, headers: %v", url, headers)
 		}
 	}
 
