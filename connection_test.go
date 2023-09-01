@@ -133,7 +133,7 @@ func TestGetQueryResultUsesTokenFromTokenAccessor(t *testing.T) {
 		cfg:  &Config{Params: map[string]*string{}},
 		rest: sr,
 	}
-	if _, err := sc.getQueryResultResp(context.Background(), ""); err != nil {
+	if _, err := sc.getQueryResultResp(context.Background(), "", ""); err != nil {
 		t.Fatalf("err: %v", err)
 	}
 }
