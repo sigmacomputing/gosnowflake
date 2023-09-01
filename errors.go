@@ -256,6 +256,7 @@ const (
 	// ErrAsyncExecutionInProgress is returned when monitoring an async query reaches 45s
 	ErrAsyncExecutionInProgress = 333334
 
+	// ErrBadDriverResponse is returned when the driver receives a response from the server that is not compliant
 	ErrBadDriverResponse = 9999999
 )
 
