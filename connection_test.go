@@ -134,7 +134,7 @@ func TestGetQueryResultUsesTokenFromTokenAccessor(t *testing.T) {
 		rest:                sr,
 		currentTimeProvider: defaultTimeProvider,
 	}
-	if _, err := sc.getQueryResultResp(context.Background(), ""); err != nil {
+	if _, err := sc.getQueryResultResp(context.Background(), "", ""); err != nil {
 		t.Fatalf("err: %v", err)
 	}
 }

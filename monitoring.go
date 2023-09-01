@@ -236,6 +236,7 @@ func shouldLogSfResponseForCacheBug(ctx context.Context) bool {
 func (sc *snowflakeConn) getQueryResultResp(
 	ctx context.Context,
 	resultPath string,
+	qid string,
 ) (*execResponse, error) {
 	var cachedResponse *execResponse
 	cachedResponse = nil
@@ -287,6 +288,13 @@ func (sc *snowflakeConn) getQueryResultResp(
 	// log when Success is false but body has data
 	if !respd.Success && respd.Code == "" && respd.Message == "" {
 		logger.WithContext(ctx).Errorf("Response body is non-empty but isSuccess is false")
+		return nil, &SnowflakeError{
+			Number:         ErrBadDriverResponse,
+			QueryID:        qid,
+			Message:        "We received a bad response from the server. Success was false but the code/error body empty",
+			MessageArgs:    nil,
+			IncludeQueryID: true,
+		}
 	}
 
 	// log to get data points for sf to debug cache issue, should log only for staging org
@@ -449,7 +457,7 @@ func (sc *snowflakeConn) rowsForRunningQuery(
 	ctx context.Context, qid string,
 	rows *snowflakeRows) error {
 	resultPath := fmt.Sprintf(urlQueriesResultFmt, qid)
-	resp, err := sc.getQueryResultResp(ctx, resultPath)
+	resp, err := sc.getQueryResultResp(ctx, resultPath, qid)
 	if err != nil {
 		logger.WithContext(ctx).Errorf("error: %v", err)
 		return err
