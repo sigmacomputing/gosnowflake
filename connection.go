@@ -134,8 +134,8 @@ func (sc *snowflakeConn) exec(
 		jsonBody, sc.rest.RequestTimeout, requestID, sc.cfg)
 
 	if shouldLogSfResponseForCacheBug(ctx) {
-		logger.WithContext(ctx).Errorf("exec request body  %s, headers: %v", string(jsonBody), headers)
-		logger.WithContext(ctx).Errorf("exec request response %v", data)
+		logger.WithContext(ctx).Errorf("exec request body  %s, headers: %+v", string(jsonBody), headers)
+		logger.WithContext(ctx).Errorf("exec request response %+v", data)
 	}
 	if err != nil {
 		return data, err
