@@ -153,7 +153,9 @@ func (sc *snowflakeConn) exec(
 		return nil, err
 	}
 
-	sc.queryContextCache.add(data.Data.QueryContext.Entries...)
+
+	// Not released yet, we should add them after they are released
+	// sc.https://sigmacomputing.slack.com/archives/C01BL8JEMJ4/p1694101775726169.add(data.Data.QueryContext.Entries...)
 
 	// handle PUT/GET commands
 	if isFileTransfer(query) {
