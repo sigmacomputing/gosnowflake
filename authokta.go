@@ -215,7 +215,7 @@ func postAuthSAML(
 	params.Add(requestIDKey, getOrGenerateRequestIDFromContext(ctx).String())
 	fullURL := sr.getFullURL(authenticatorRequestPath, params)
 
-	logger.Infof("fullURL: %v", fullURL)
+	logger.WithContext(ctx).Infof("fullURL: %v", fullURL)
 	resp, err := sr.FuncPost(ctx, sr, fullURL, headers, body, timeout, true)
 	if err != nil {
 		return nil, err
@@ -269,7 +269,7 @@ func postAuthOKTA(
 	fullURL string,
 	timeout time.Duration) (
 	data *authOKTAResponse, err error) {
-	logger.Infof("fullURL: %v", fullURL)
+	logger.WithContext(ctx).Infof("fullURL: %v", fullURL)
 	targetURL, err := url.Parse(fullURL)
 	if err != nil {
 		return nil, err

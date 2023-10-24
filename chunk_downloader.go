@@ -144,11 +144,11 @@ func (scd *snowflakeChunkDownloader) start() error {
 func (scd *snowflakeChunkDownloader) schedule() {
 	select {
 	case nextIdx := <-scd.ChunksChan:
-		logger.Infof("schedule chunk: %v", nextIdx+1)
+		logger.WithContext(scd.ctx).Infof("schedule chunk: %v", nextIdx+1)
 		go scd.FuncDownload(scd.ctx, scd, nextIdx)
 	default:
 		// no more download
-		logger.Info("no more download")
+		logger.WithContext(scd.ctx).Info("no more download")
 	}
 }
 
@@ -169,7 +169,7 @@ func (scd *snowflakeChunkDownloader) checkErrorRetry() (err error) {
 			return errc.Error
 		}
 	default:
-		logger.Info("no error is detected.")
+		logger.WithContext(scd.ctx).Info("no error is detected.")
 	}
 	return nil
 }
@@ -332,7 +332,7 @@ func (r *largeResultSetReader) Read(p []byte) (n int, err error) {
 }
 
 func downloadChunk(ctx context.Context, scd *snowflakeChunkDownloader, idx int) {
-	logger.Infof("download start chunk: %v", idx+1)
+	logger.WithContext(scd.ctx).Infof("download start chunk: %v", idx+1)
 	defer scd.DoneDownloadCond.Broadcast()
 
 	if err := scd.FuncDownloadHelper(ctx, scd, idx); err != nil {
@@ -370,8 +370,8 @@ func downloadChunkHelper(ctx context.Context, scd *snowflakeChunkDownloader, idx
 		if err != nil {
 			return err
 		}
-		logger.Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, scd.ChunkMetas[idx].URL, b)
-		logger.Infof("Header: %v", resp.Header)
+		logger.WithContext(scd.ctx).Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, scd.ChunkMetas[idx].URL, b)
+		logger.WithContext(scd.ctx).Infof("Header: %v", resp.Header)
 		return &SnowflakeError{
 			Number:      ErrFailedToGetChunk,
 			SQLState:    SQLStateConnectionFailure,
