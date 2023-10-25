@@ -573,8 +573,8 @@ func (asb *ArrowStreamBatch) downloadChunkStreamHelper(ctx context.Context) erro
 			return err
 		}
 
-		logger.Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, asb.scd.ChunkMetas[asb.idx].URL, b)
-		logger.Infof("Header: %v", resp.Header)
+		logger.WithContext(asb.scd.sc.ctx).Infof("HTTP: %v, URL: %v, Body: %v", resp.StatusCode, asb.scd.ChunkMetas[asb.idx].URL, b)
+		logger.WithContext(asb.scd.sc.ctx).Infof("Header: %v", resp.Header)
 		return &SnowflakeError{
 			Number:      ErrFailedToGetChunk,
 			SQLState:    SQLStateConnectionFailure,
