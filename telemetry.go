@@ -99,27 +99,27 @@ func (st *snowflakeTelemetry) sendBatch() error {
 		st.sr.getFullURL(telemetryPath, nil), headers, body,
 		defaultTelemetryTimeout, true)
 	if err != nil {
-		logger.WithContext(st.sr.Connection.ctx).Infof("failed to upload metrics to telemetry. err: %v", err)
+		logger.Infof("failed to upload metrics to telemetry. err: %v", err)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf("non-successful response from telemetry server: %v. "+
 			"disabling telemetry", resp.StatusCode)
-		logger.WithContext(st.sr.Connection.ctx).Info(err)
+		logger.Info(err)
 		st.enabled = false
 		return err
 	}
 	var respd telemetryResponse
 	if err = json.NewDecoder(resp.Body).Decode(&respd); err != nil {
-		logger.WithContext(st.sr.Connection.ctx).Info(err)
+		logger.Info(err)
 		st.enabled = false
 		return err
 	}
 	if !respd.Success {
 		err = fmt.Errorf("telemetry send failed with error code: %v, message: %v",
 			respd.Code, respd.Message)
-		logger.WithContext(st.sr.Connection.ctx).Info(err)
+		logger.Info(err)
 		st.enabled = false
 		return err
 	}
