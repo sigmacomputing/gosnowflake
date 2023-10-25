@@ -99,7 +99,7 @@ func (st *snowflakeTelemetry) sendBatch() error {
 		st.sr.getFullURL(telemetryPath, nil), headers, body,
 		defaultTelemetryTimeout, defaultTimeProvider, nil)
 	if err != nil {
-		logger.Info("failed to upload metrics to telemetry. err: %v", err)
+		logger.Infof("failed to upload metrics to telemetry. err: %v", err)
 		return err
 	}
 	defer resp.Body.Close()

@@ -255,7 +255,7 @@ func doAuthenticateByExternalBrowser(
 			n, err := c.Read(b)
 			if err != nil {
 				if err != io.EOF {
-					logger.Infof("error reading from socket. err: %v", err)
+					logger.WithContext(ctx).Infof("error reading from socket. err: %v", err)
 					errAccept = &SnowflakeError{
 						Number:      ErrFailedToGetExternalBrowserResponse,
 						SQLState:    SQLStateConnectionRejected,
