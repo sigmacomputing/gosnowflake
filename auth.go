@@ -35,6 +35,28 @@ const (
 // AuthType indicates the type of authentication in Snowflake
 type AuthType int
 
+type SessionMetadata struct {
+	ServerVersion string
+}
+
+type AuthSuccessHook func(context.Context, SessionMetadata)
+
+var authSuccessHook AuthSuccessHook
+
+// RegisterAuthSuccessHook registers a hook that can be used to extract metadata
+// from an auth response, such as the server version, for example, for logging
+// purposes. This function is not thread-safe, and should only be called once,
+// at startup.
+func RegisterAuthSuccessHook(hook AuthSuccessHook) {
+	authSuccessHook = hook
+}
+
+func logAuthSuccessMetadata(ctx context.Context, metadata SessionMetadata) {
+	if authSuccessHook != nil {
+		authSuccessHook(ctx, metadata)
+	}
+}
+
 const (
 	// AuthTypeSnowflake is the general username password authentication
 	AuthTypeSnowflake AuthType = iota
@@ -553,6 +575,11 @@ func authenticateWithConfig(sc *snowflakeConn) error {
 	}
 	sc.populateSessionParameters(authData.Parameters)
 	sc.ctx = context.WithValue(sc.ctx, SFSessionIDKey, authData.SessionID)
+
+	logAuthSuccessMetadata(sc.ctx, SessionMetadata{
+		ServerVersion: authData.ServerVersion,
+	})
+
 	return nil
 }
 
