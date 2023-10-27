@@ -553,6 +553,9 @@ func authenticateWithConfig(sc *snowflakeConn) error {
 	}
 	sc.populateSessionParameters(authData.Parameters)
 	sc.ctx = context.WithValue(sc.ctx, SFSessionIDKey, authData.SessionID)
+
+	sc.serverVersion = authData.ServerVersion
+
 	return nil
 }
 
