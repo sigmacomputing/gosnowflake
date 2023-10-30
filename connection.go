@@ -71,6 +71,9 @@ type snowflakeConn struct {
 	internal          InternalClient
 	execRespCache     *execRespCache
 	queryContextCache *queryContextCache
+
+	// Server version obtained from the auth response.
+	serverVersion string
 }
 
 var (
@@ -151,7 +154,6 @@ func (sc *snowflakeConn) exec(
 		err = (populateErrorFields(code, data)).exceptionTelemetry(sc)
 		return nil, err
 	}
-
 
 	// Not released yet, we should add them after they are released
 	// sc.queryContextCache.add(data.Data.QueryContext.Entries...)
