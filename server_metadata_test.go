@@ -36,7 +36,7 @@ func TestUnitLogAuthSuccessMetadata(t *testing.T) {
 		t.Fatalf("failed to run. err: %v", err)
 	}
 
-	if sc.ServerVersion() != "123.456.7" {
-		t.Fatalf("Expected server version 123.456.7, got %v", sc.ServerVersion())
+	if sc.Version() != "123.456.7" {
+		t.Fatalf("Expected server version 123.456.7, got %v", sc.Version())
 	}
 }
