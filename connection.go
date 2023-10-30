@@ -82,6 +82,9 @@ type snowflakeConn struct {
 	queryContextCache   *queryContextCache
 	currentTimeProvider currentTimeProvider
 	execRespCache       *execRespCache
+
+	// Server version obtained from the auth response.
+	serverVersion string
 }
 
 var (
