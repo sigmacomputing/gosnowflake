@@ -1066,7 +1066,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 				for i := 0; i < int(numRows); i++ {
 					if !col.IsNull(i) {
 						val := time.Unix(epoch[i], int64(fraction[i]))
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMicro()))
 					} else {
 						tb.AppendNull()
 					}
@@ -1075,7 +1075,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 				for i, t := range col.(*array.Int64).Int64Values() {
 					if !col.IsNull(i) {
 						val := time.Unix(0, t*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).UTC()
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMicro()))
 					} else {
 						tb.AppendNull()
 					}
@@ -1089,7 +1089,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 				for i, t := range timestampValues {
 					if !col.IsNull(i) {
 						val := time.Unix(0, int64(t)*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).UTC()
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMicro()))
 					} else {
 						tb.AppendNull()
 					}
@@ -1108,7 +1108,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 				for i := 0; i < int(numRows); i++ {
 					if !col.IsNull(i) {
 						val := time.Unix(epoch[i], int64(fraction[i]))
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMicro()))
 					} else {
 						tb.AppendNull()
 					}
@@ -1119,7 +1119,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 						q := t / int64(math.Pow10(int(srcColumnMeta.Scale)))
 						r := t % int64(math.Pow10(int(srcColumnMeta.Scale)))
 						val := time.Unix(q, r)
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMicro()))
 					} else {
 						tb.AppendNull()
 					}
@@ -1135,7 +1135,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 						q := int64(t) / int64(math.Pow10(int(srcColumnMeta.Scale)))
 						r := int64(t) % int64(math.Pow10(int(srcColumnMeta.Scale)))
 						val := time.Unix(q, r)
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMicro()))
 					} else {
 						tb.AppendNull()
 					}
@@ -1166,7 +1166,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 						loc := Location(int(timezone[i]) - 1440)
 						tt := time.Unix(epoch[i], 0)
 						val := tt.In(loc)
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMicro()))
 					} else {
 						tb.AppendNull()
 					}
@@ -1195,7 +1195,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 						loc := Location(int(timezone[i]) - 1440)
 						tt := time.Unix(epoch[i], int64(fraction[i]))
 						val := tt.In(loc)
-						tb.Append(arrow.Timestamp(val.UnixNano()))
+						tb.Append(arrow.Timestamp(val.UnixMicro()))
 					} else {
 						tb.AppendNull()
 					}
@@ -1220,11 +1220,11 @@ func recordToSchema(sc *arrow.Schema, rowType []execResponseRowType, loc *time.L
 		var t arrow.DataType
 		switch getSnowflakeType(strings.ToUpper(srcColumnMeta.Type)) {
 		case timeType:
-			t = &arrow.Time64Type{Unit: arrow.Nanosecond}
+			t = &arrow.Time64Type{Unit: arrow.Microsecond}
 		case timestampNtzType, timestampTzType:
-			t = &arrow.TimestampType{Unit: arrow.Nanosecond}
+			t = &arrow.TimestampType{Unit: arrow.Microsecond}
 		case timestampLtzType:
-			t = &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: loc.String()}
+			t = &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: loc.String()}
 		default:
 			converted = false
 		}
