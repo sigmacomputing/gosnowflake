@@ -1042,13 +1042,13 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 		newCol := col
 		switch getSnowflakeType(strings.ToUpper(srcColumnMeta.Type)) {
 		case timeType:
-			newCol, err = compute.CastArray(ctx, col, compute.SafeCastOptions(arrow.FixedWidthTypes.Time64ns))
+			newCol, err = compute.CastArray(ctx, col, compute.SafeCastOptions(arrow.FixedWidthTypes.Time64us))
 			if err != nil {
 				return nil, err
 			}
 			defer newCol.Release()
 		case timestampNtzType:
-			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
+			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Microsecond})
 			if col.DataType().ID() == arrow.STRUCT {
 				structData := col.(*array.Struct)
 				epochArray, ok := structData.Field(0).(*array.Int64)
@@ -1099,7 +1099,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 			defer newCol.Release()
 			tb.Release()
 		case timestampLtzType:
-			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: loc.String()})
+			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: loc.String()})
 			if col.DataType().ID() == arrow.STRUCT {
 				structData := col.(*array.Struct)
 
@@ -1145,7 +1145,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 			defer newCol.Release()
 			tb.Release()
 		case timestampTzType:
-			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
+			tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Microsecond})
 			structData, ok := col.(*array.Struct)
 			if !ok {
 				return nil, fmt.Errorf("expect type *array.Struct but get %s", col.DataType())
