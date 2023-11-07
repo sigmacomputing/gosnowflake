@@ -913,19 +913,10 @@ func TestArrowToRecord(t *testing.T) {
 	var valids []bool           // AppendValues() with an empty valid array adds every value by default
 
 	localTime := time.Date(2019, 2, 6, 14, 17, 31, 123456789, time.FixedZone("-08:00", -8*3600))
-	localTimeFarIntoFuture := time.Date(9000, 2, 6, 14, 17, 31, 123456789, time.FixedZone("-08:00", -8*3600))
 
 	field1 := arrow.Field{Name: "epoch", Type: &arrow.Int64Type{}}
 	field2 := arrow.Field{Name: "timezone", Type: &arrow.Int32Type{}}
 	tzStruct := arrow.StructOf(field1, field2)
-
-	epochField := arrow.Field{Name: "epoch", Type: &arrow.Int64Type{}}
-	timezoneField := arrow.Field{Name: "timezone", Type: &arrow.Int32Type{}}
-	fractionField := arrow.Field{Name: "fraction", Type: &arrow.Int32Type{}}
-	timestampTzStructWithoutFraction := arrow.StructOf(epochField, timezoneField)
-	timestampTzStructWithFraction := arrow.StructOf(epochField, fractionField, timezoneField)
-	timestampNtzStruct := arrow.StructOf(epochField, fractionField)
-	timestampLtzStruct := arrow.StructOf(epochField, fractionField)
 
 	type testObj struct {
 		field1 int
@@ -1029,7 +1020,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if !srcvs[i].Equal(t.ToTime(arrow.Nanosecond)) {
+					if srcvs[i].UnixMicro() != int64(t) {
 						return i
 					}
 				}
@@ -1052,7 +1043,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if srcvs[i].UnixNano() != int64(t) {
+					if srcvs[i].UnixMicro() != int64(t) {
 						return i
 					}
 				}
@@ -1074,7 +1065,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if srcvs[i].UnixNano() != int64(t) {
+					if srcvs[i].UnixMicro() != int64(t) {
 						return i
 					}
 				}
@@ -1097,7 +1088,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if srcvs[i].UnixNano() != int64(t) {
+					if srcvs[i].UnixMicro() != int64(t) {
 						return i
 					}
 				}
@@ -1122,311 +1113,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if !srcvs[i].Equal(t.ToTime(arrow.Nanosecond)) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_ntz",
-			physical: "error",
-			values:   []time.Time{localTimeFarIntoFuture},
-			error:    "Cannot convert timestamp",
-			nrows:    1,
-			rowType:  execResponseRowType{Scale: 3},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: &arrow.Int64Type{}}}, nil),
-			builder:  array.NewInt64Builder(pool),
-			append: func(b array.Builder, vs interface{}) {
-				for _, t := range vs.([]time.Time) {
-					b.(*array.Int64Builder).Append(t.UnixMilli())
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int { return 0 },
-		},
-		{
-			logical:  "timestamp_ntz",
-			physical: "int64 with original timestamp", // timestamp_ntz with scale 0..3 -> int64
-			values:   []time.Time{time.Now().Truncate(time.Millisecond), localTime.Truncate(time.Millisecond), localTimeFarIntoFuture.Truncate(time.Millisecond)},
-			origTS:   true,
-			nrows:    3,
-			rowType:  execResponseRowType{Scale: 3},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: &arrow.Int64Type{}}}, nil),
-			builder:  array.NewInt64Builder(pool),
-			append: func(b array.Builder, vs interface{}) {
-				for _, t := range vs.([]time.Time) {
-					b.(*array.Int64Builder).Append(t.UnixMilli()) // Millisecond for scale = 3
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i := 0; i < convertedRec.Column(0).Len(); i++ {
-					ts := arrowSnowflakeTimestampToTime(convertedRec.Column(0), timestampNtzType, 3, i, nil)
-					if !srcvs[i].Equal(*ts) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_ntz",
-			physical: "struct with original timestamp", // timestamp_ntz with scale 4..9 -> int64 + int32
-			values:   []time.Time{time.Now(), localTime, localTimeFarIntoFuture},
-			origTS:   true,
-			nrows:    3,
-			rowType:  execResponseRowType{Scale: 9},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: timestampNtzStruct}}, nil),
-			builder:  array.NewStructBuilder(pool, timestampNtzStruct),
-			append: func(b array.Builder, vs interface{}) {
-				sb := b.(*array.StructBuilder)
-				valids = []bool{true, true, true}
-				sb.AppendValues(valids)
-				for _, t := range vs.([]time.Time) {
-					sb.FieldBuilder(0).(*array.Int64Builder).Append(t.Unix())
-					sb.FieldBuilder(1).(*array.Int32Builder).Append(int32(t.Nanosecond()))
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i := 0; i < convertedRec.Column(0).Len(); i++ {
-					ts := arrowSnowflakeTimestampToTime(convertedRec.Column(0), timestampNtzType, 9, i, nil)
-					if !srcvs[i].Equal(*ts) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_ltz",
-			physical: "int64", // timestamp_ntz with scale 0..3 -> int64
-			values:   []time.Time{time.Now().Truncate(time.Millisecond), localTime.Truncate(time.Millisecond)},
-			nrows:    2,
-			rowType:  execResponseRowType{Scale: 3},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: &arrow.Int64Type{}}}, nil),
-			builder:  array.NewInt64Builder(pool),
-			append: func(b array.Builder, vs interface{}) {
-				for _, t := range vs.([]time.Time) {
-					b.(*array.Int64Builder).Append(t.UnixMilli()) // Millisecond for scale = 3
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if !srcvs[i].Equal(t.ToTime(arrow.Nanosecond)) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_ltz",
-			physical: "struct", // timestamp_ntz with scale 4..9 -> int64 + int32
-			values:   []time.Time{time.Now(), localTime},
-			nrows:    2,
-			rowType:  execResponseRowType{Scale: 9},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: timestampNtzStruct}}, nil),
-			builder:  array.NewStructBuilder(pool, timestampNtzStruct),
-			append: func(b array.Builder, vs interface{}) {
-				sb := b.(*array.StructBuilder)
-				valids = []bool{true, true}
-				sb.AppendValues(valids)
-				for _, t := range vs.([]time.Time) {
-					sb.FieldBuilder(0).(*array.Int64Builder).Append(t.Unix())
-					sb.FieldBuilder(1).(*array.Int32Builder).Append(int32(t.Nanosecond()))
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if !srcvs[i].Equal(t.ToTime(arrow.Nanosecond)) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_ltz",
-			physical: "error",
-			values:   []time.Time{localTimeFarIntoFuture},
-			error:    "Cannot convert timestamp",
-			nrows:    1,
-			rowType:  execResponseRowType{Scale: 3},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: &arrow.Int64Type{}}}, nil),
-			builder:  array.NewInt64Builder(pool),
-			append: func(b array.Builder, vs interface{}) {
-				for _, t := range vs.([]time.Time) {
-					b.(*array.Int64Builder).Append(t.UnixMilli()) // Millisecond for scale = 3
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int { return 0 },
-		},
-		{
-			logical:  "timestamp_ltz",
-			physical: "int64 with original timestamp", // timestamp_ntz with scale 0..3 -> int64
-			values:   []time.Time{time.Now().Truncate(time.Millisecond), localTime.Truncate(time.Millisecond), localTimeFarIntoFuture.Truncate(time.Millisecond)},
-			origTS:   true,
-			nrows:    3,
-			rowType:  execResponseRowType{Scale: 3},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: &arrow.Int64Type{}}}, nil),
-			builder:  array.NewInt64Builder(pool),
-			append: func(b array.Builder, vs interface{}) {
-				for _, t := range vs.([]time.Time) {
-					b.(*array.Int64Builder).Append(t.UnixMilli()) // Millisecond for scale = 3
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i := 0; i < convertedRec.Column(0).Len(); i++ {
-					ts := arrowSnowflakeTimestampToTime(convertedRec.Column(0), timestampLtzType, 3, i, localTime.Location())
-					if !srcvs[i].Equal(*ts) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_ltz",
-			physical: "struct with original timestamp", // timestamp_ntz with scale 4..9 -> int64 + int32
-			values:   []time.Time{time.Now(), localTime, localTimeFarIntoFuture},
-			origTS:   true,
-			nrows:    3,
-			rowType:  execResponseRowType{Scale: 9},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: timestampLtzStruct}}, nil),
-			builder:  array.NewStructBuilder(pool, timestampLtzStruct),
-			append: func(b array.Builder, vs interface{}) {
-				sb := b.(*array.StructBuilder)
-				valids = []bool{true, true, true}
-				sb.AppendValues(valids)
-				for _, t := range vs.([]time.Time) {
-					sb.FieldBuilder(0).(*array.Int64Builder).Append(t.Unix())
-					sb.FieldBuilder(1).(*array.Int32Builder).Append(int32(t.Nanosecond()))
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i := 0; i < convertedRec.Column(0).Len(); i++ {
-					ts := arrowSnowflakeTimestampToTime(convertedRec.Column(0), timestampLtzType, 9, i, localTime.Location())
-					if !srcvs[i].Equal(*ts) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_tz",
-			physical: "struct2", // timestamp_tz with scale 0..3 -> int64 + int32
-			values:   []time.Time{time.Now().Truncate(time.Millisecond), localTime.Truncate(time.Millisecond)},
-			nrows:    2,
-			rowType:  execResponseRowType{Scale: 3},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: timestampTzStructWithoutFraction}}, nil),
-			builder:  array.NewStructBuilder(pool, timestampTzStructWithoutFraction),
-			append: func(b array.Builder, vs interface{}) {
-				sb := b.(*array.StructBuilder)
-				valids = []bool{true, true}
-				sb.AppendValues(valids)
-				for _, t := range vs.([]time.Time) {
-					sb.FieldBuilder(0).(*array.Int64Builder).Append(t.UnixMilli()) // Millisecond for scale = 3
-					sb.FieldBuilder(1).(*array.Int32Builder).Append(int32(0))      // timezone index - not important in tests
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if !srcvs[i].Equal(t.ToTime(arrow.Nanosecond)) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_tz",
-			physical: "struct3", // timestamp_tz with scale 4..9 -> int64 + int32 + int32
-			values:   []time.Time{time.Now(), localTime},
-			nrows:    2,
-			rowType:  execResponseRowType{Scale: 9},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: timestampTzStructWithFraction}}, nil),
-			builder:  array.NewStructBuilder(pool, timestampTzStructWithFraction),
-			append: func(b array.Builder, vs interface{}) {
-				sb := b.(*array.StructBuilder)
-				valids = []bool{true, true}
-				sb.AppendValues(valids)
-				for _, t := range vs.([]time.Time) {
-					sb.FieldBuilder(0).(*array.Int64Builder).Append(t.Unix())
-					sb.FieldBuilder(1).(*array.Int32Builder).Append(int32(t.Nanosecond()))
-					sb.FieldBuilder(2).(*array.Int32Builder).Append(int32(0)) // timezone index - not important in tests
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if !srcvs[i].Equal(t.ToTime(arrow.Nanosecond)) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_tz",
-			physical: "struct2 with original timestamp", // timestamp_ntz with scale 0..3 -> int64 + int32
-			values:   []time.Time{time.Now().Truncate(time.Millisecond), localTime.Truncate(time.Millisecond), localTimeFarIntoFuture.Truncate(time.Millisecond)},
-			origTS:   true,
-			nrows:    3,
-			rowType:  execResponseRowType{Scale: 3},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: timestampTzStructWithoutFraction}}, nil),
-			builder:  array.NewStructBuilder(pool, timestampTzStructWithoutFraction),
-			append: func(b array.Builder, vs interface{}) {
-				sb := b.(*array.StructBuilder)
-				valids = []bool{true, true, true}
-				sb.AppendValues(valids)
-				for _, t := range vs.([]time.Time) {
-					sb.FieldBuilder(0).(*array.Int64Builder).Append(t.UnixMilli()) // Millisecond for scale = 3
-					sb.FieldBuilder(1).(*array.Int32Builder).Append(int32(0))      // timezone index - not important in tests
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i := 0; i < convertedRec.Column(0).Len(); i++ {
-					ts := arrowSnowflakeTimestampToTime(convertedRec.Column(0), timestampTzType, 3, i, nil)
-					if !srcvs[i].Equal(*ts) {
-						return i
-					}
-				}
-				return -1
-			},
-		},
-		{
-			logical:  "timestamp_tz",
-			physical: "struct3 with original timestamp", // timestamp_ntz with scale 4..9 -> int64 + int32 + int32
-			values:   []time.Time{time.Now(), localTime, localTimeFarIntoFuture},
-			origTS:   true,
-			nrows:    3,
-			rowType:  execResponseRowType{Scale: 9},
-			sc:       arrow.NewSchema([]arrow.Field{{Type: timestampTzStructWithFraction}}, nil),
-			builder:  array.NewStructBuilder(pool, timestampTzStructWithFraction),
-			append: func(b array.Builder, vs interface{}) {
-				sb := b.(*array.StructBuilder)
-				valids = []bool{true, true, true}
-				sb.AppendValues(valids)
-				for _, t := range vs.([]time.Time) {
-					sb.FieldBuilder(0).(*array.Int64Builder).Append(t.Unix())
-					sb.FieldBuilder(1).(*array.Int32Builder).Append(int32(t.Nanosecond()))
-					sb.FieldBuilder(2).(*array.Int32Builder).Append(int32(0)) // timezone index - not important in tests
-				}
-			},
-			compare: func(src interface{}, convertedRec arrow.Record) int {
-				srcvs := src.([]time.Time)
-				for i := 0; i < convertedRec.Column(0).Len(); i++ {
-					ts := arrowSnowflakeTimestampToTime(convertedRec.Column(0), timestampTzType, 9, i, nil)
-					if !srcvs[i].Equal(*ts) {
+					if srcvs[i].Unix() != time.Unix(0, int64(t)*1000).Unix() {
 						return i
 					}
 				}

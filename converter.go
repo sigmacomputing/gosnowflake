@@ -1127,7 +1127,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 			if useOriginalTimestamp {
 				// do nothing - return timestamp as is
 			} else {
-				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
+				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Microsecond})
 				if col.DataType().ID() == arrow.STRUCT {
 					structData := col.(*array.Struct)
 					epochArray, ok := structData.Field(0).(*array.Int64)
@@ -1145,7 +1145,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 					for i := 0; i < int(numRows); i++ {
 						if !col.IsNull(i) {
 							val := time.Unix(epoch[i], int64(fraction[i]))
-							tb.Append(arrow.Timestamp(val.UnixNano()))
+							tb.Append(arrow.Timestamp(val.UnixMicro()))
 						} else {
 							tb.AppendNull()
 						}
@@ -1154,7 +1154,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 					for i, t := range col.(*array.Int64).Int64Values() {
 						if !col.IsNull(i) {
 							val := time.Unix(0, t*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).UTC()
-							tb.Append(arrow.Timestamp(val.UnixNano()))
+							tb.Append(arrow.Timestamp(val.UnixMicro()))
 						} else {
 							tb.AppendNull()
 						}
@@ -1168,7 +1168,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 					for i, t := range timestampValues {
 						if !col.IsNull(i) {
 							val := time.Unix(0, int64(t)*int64(math.Pow10(9-int(srcColumnMeta.Scale)))).UTC()
-							tb.Append(arrow.Timestamp(val.UnixNano()))
+							tb.Append(arrow.Timestamp(val.UnixMicro()))
 						} else {
 							tb.AppendNull()
 						}
@@ -1182,7 +1182,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 			if useOriginalTimestamp {
 				// do nothing - return timestamp as is
 			} else {
-				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: loc.String()})
+				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: loc.String()})
 				if col.DataType().ID() == arrow.STRUCT {
 					structData := col.(*array.Struct)
 
@@ -1191,7 +1191,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 					for i := 0; i < int(numRows); i++ {
 						if !col.IsNull(i) {
 							val := time.Unix(epoch[i], int64(fraction[i]))
-							tb.Append(arrow.Timestamp(val.UnixNano()))
+							tb.Append(arrow.Timestamp(val.UnixMicro()))
 						} else {
 							tb.AppendNull()
 						}
@@ -1202,7 +1202,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 							q := t / int64(math.Pow10(int(srcColumnMeta.Scale)))
 							r := t % int64(math.Pow10(int(srcColumnMeta.Scale)))
 							val := time.Unix(q, r)
-							tb.Append(arrow.Timestamp(val.UnixNano()))
+							tb.Append(arrow.Timestamp(val.UnixMicro()))
 						} else {
 							tb.AppendNull()
 						}
@@ -1218,7 +1218,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 							q := int64(t) / int64(math.Pow10(int(srcColumnMeta.Scale)))
 							r := int64(t) % int64(math.Pow10(int(srcColumnMeta.Scale)))
 							val := time.Unix(q, r)
-							tb.Append(arrow.Timestamp(val.UnixNano()))
+							tb.Append(arrow.Timestamp(val.UnixMicro()))
 						} else {
 							tb.AppendNull()
 						}
@@ -1232,7 +1232,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 			if useOriginalTimestamp {
 				// do nothing - return timestamp as is
 			} else {
-				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
+				tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Microsecond})
 				structData, ok := col.(*array.Struct)
 				if !ok {
 					return nil, fmt.Errorf("expect type *array.Struct but get %s", col.DataType())
@@ -1253,7 +1253,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 							loc := Location(int(timezone[i]) - 1440)
 							tt := time.Unix(epoch[i], 0)
 							val := tt.In(loc)
-							tb.Append(arrow.Timestamp(val.UnixNano()))
+							tb.Append(arrow.Timestamp(val.UnixMicro()))
 						} else {
 							tb.AppendNull()
 						}
@@ -1282,7 +1282,7 @@ func arrowToRecord(ctx context.Context, record arrow.Record, pool memory.Allocat
 							loc := Location(int(timezone[i]) - 1440)
 							tt := time.Unix(epoch[i], int64(fraction[i]))
 							val := tt.In(loc)
-							tb.Append(arrow.Timestamp(val.UnixNano()))
+							tb.Append(arrow.Timestamp(val.UnixMicro()))
 						} else {
 							tb.AppendNull()
 						}
@@ -1314,14 +1314,14 @@ func recordToSchema(sc *arrow.Schema, rowType []execResponseRowType, loc *time.L
 				// do nothing - return timestamp as is
 				converted = false
 			} else {
-				t = &arrow.TimestampType{Unit: arrow.Nanosecond}
+				t = &arrow.TimestampType{Unit: arrow.Microsecond}
 			}
 		case timestampLtzType:
 			if useOriginalTimestamp {
 				// do nothing - return timestamp as is
 				converted = false
 			} else {
-				t = &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: loc.String()}
+				t = &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: loc.String()}
 			}
 		default:
 			converted = false
