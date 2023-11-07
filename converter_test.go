@@ -952,7 +952,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if srcvs[i].UnixNano() != int64(t) {
+					if srcvs[i].UnixMicro() != int64(t) {
 						return i
 					}
 				}
@@ -975,7 +975,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if srcvs[i].UnixNano() != int64(t) {
+					if srcvs[i].UnixMicro() != int64(t) {
 						return i
 					}
 				}
@@ -997,7 +997,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if srcvs[i].UnixNano() != int64(t) {
+					if srcvs[i].UnixMicro() != int64(t) {
 						return i
 					}
 				}
@@ -1020,7 +1020,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if srcvs[i].UnixNano() != int64(t) {
+					if srcvs[i].UnixMicro() != int64(t) {
 						return i
 					}
 				}
@@ -1045,7 +1045,7 @@ func TestArrowToRecord(t *testing.T) {
 			compare: func(src interface{}, convertedRec arrow.Record) int {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
-					if srcvs[i].Unix() != time.Unix(0, int64(t)).Unix() {
+					if srcvs[i].Unix() != time.Unix(0, int64(t) * 1000).Unix() {
 						return i
 					}
 				}
