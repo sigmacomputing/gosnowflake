@@ -1021,7 +1021,6 @@ func TestArrowToRecord(t *testing.T) {
 				srcvs := src.([]time.Time)
 				for i, t := range convertedRec.Column(0).(*array.Timestamp).TimestampValues() {
 					if srcvs[i].UnixMicro() != int64(t) {
-						fmt.Println("srcvs[i].UnixMicro() {} int64(t) {}", srcvs[i].UnixMicro(), int64(t))
 						return i
 					}
 				}
