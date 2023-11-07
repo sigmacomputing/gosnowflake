@@ -1042,7 +1042,7 @@ func arrowToRecord(record arrow.Record, pool memory.Allocator, rowType []execRes
 		newCol := col
 		switch getSnowflakeType(strings.ToUpper(srcColumnMeta.Type)) {
 		case timeType:
-			newCol, err = compute.CastArray(ctx, col, compute.SafeCastOptions(arrow.FixedWidthTypes.Time64us))
+			newCol, err = compute.CastArray(ctx, col, compute.SafeCastOptions(arrow.FixedWidthTypes.Time64ns))
 			if err != nil {
 				return nil, err
 			}
@@ -1220,7 +1220,7 @@ func recordToSchema(sc *arrow.Schema, rowType []execResponseRowType, loc *time.L
 		var t arrow.DataType
 		switch getSnowflakeType(strings.ToUpper(srcColumnMeta.Type)) {
 		case timeType:
-			t = &arrow.Time64Type{Unit: arrow.Microsecond}
+			t = &arrow.Time64Type{Unit: arrow.Nanosecond}
 		case timestampNtzType, timestampTzType:
 			t = &arrow.TimestampType{Unit: arrow.Microsecond}
 		case timestampLtzType:

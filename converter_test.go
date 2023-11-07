@@ -930,7 +930,7 @@ func TestArrowToRecord(t *testing.T) {
 				srcvs := src.([]time.Time)
 				arr := convertedRec.Column(0).(*array.Time64)
 				for i := 0; i < arr.Len(); i++ {
-					if srcvs[i].UnixMicro() != int64(arr.Value(i)) {
+					if srcvs[i].UnixNano() != int64(arr.Value(i)) {
 						return i
 					}
 				}
