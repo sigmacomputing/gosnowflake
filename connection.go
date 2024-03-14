@@ -518,8 +518,8 @@ func (sc *snowflakeConn) CheckNamedValue(nv *driver.NamedValue) error {
 		// distinguish them from arguments of type []byte
 		return nil
 	}
-	if supported := supportedArrayBind(nv); !supported {
-		return driver.ErrSkip
+	if supportedNullBind(nv) || supportedArrayBind(nv) {
+		return nil
 	}
 	return driver.ErrSkip
 }

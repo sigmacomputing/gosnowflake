@@ -338,7 +338,12 @@ func TestQueryContextCacheDisabled(t *testing.T) {
 }
 
 func TestHybridTablesE2E(t *testing.T) {
-	if runningOnGithubAction() && !runningOnAWS() {
+	// (sigma rebase): skip this test on github actions since sigma test user doesn't have privileges to create a
+	// atabase, TODO fix/revisit once we need to explicitly support hybrid tables
+	if runningOnGithubAction() {
+		t.Skip("insufficient privileges")
+	}
+	if !runningOnAWS() {
 		t.Skip("HTAP is enabled only on AWS")
 	}
 	runID := time.Now().UnixMilli()

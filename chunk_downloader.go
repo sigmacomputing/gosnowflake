@@ -268,9 +268,6 @@ func getChunk(
 }
 
 func (scd *snowflakeChunkDownloader) startArrowBatches() error {
-	if scd.RowSet.RowSetBase64 == "" {
-		return nil
-	}
 	var err error
 	chunkMetaLen := len(scd.ChunkMetas)
 	var loc *time.Location

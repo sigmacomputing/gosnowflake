@@ -58,17 +58,18 @@ func isInterfaceArrayBinding(t interface{}) bool {
 
 // goTypeToSnowflake translates Go data type to Snowflake data type.
 func goTypeToSnowflake(v driver.Value, dataType SnowflakeDataType) snowflakeType {
+	// (raj) This will fail build. Reconcile after merge
 	if dataType == nil {
 		switch t := v.(type) {
 		case SnowflakeDataType:
 			return changeType
-		case int64:
+		case int64, sql.NullInt64:
 			return fixedType
-		case float64:
+		case float64, sql.NullFloat64:
 			return realType
-		case bool:
+		case bool, sql.NullBool:
 			return booleanType
-		case string:
+		case string, sql.NullString:
 			return textType
 		case []byte:
 			if t == nil {
@@ -76,7 +77,7 @@ func goTypeToSnowflake(v driver.Value, dataType SnowflakeDataType) snowflakeType
 			}
 			// If we don't have an explicit data type, binary blobs are unsupported
 			return unSupportedType
-		case time.Time:
+		case time.Time, sql.NullTime:
 			// Default timestamp type
 			return timestampNtzType
 		}
@@ -152,61 +153,69 @@ func valueToString(v driver.Value, dataType SnowflakeDataType) (*string, error) 
 		s := v1.String()
 		return &s, nil
 	case reflect.Struct:
-		if tm, ok := v.(time.Time); ok {
-			switch {
-			case dataType.Equals(DataTypeDate):
-				_, offset := tm.Zone()
-				tm = tm.Add(time.Second * time.Duration(offset))
-				s := strconv.FormatInt(tm.Unix()*1000, 10)
-				return &s, nil
-			case dataType.Equals(DataTypeTime):
-				s := fmt.Sprintf("%d",
-					(tm.Hour()*3600+tm.Minute()*60+tm.Second())*1e9+tm.Nanosecond())
-				return &s, nil
-			case dataType.Equals(DataTypeTimestampNtz) || dataType.Equals(DataTypeTimestampLtz) || dataType == nil:
-				// NOTE(greg): when the client has not given us an explicit dataType
-				// (dataType == nil), we assume DataTypeTimestampNtz for compatibility
-				// with the upstream driver
-				unixTime, _ := new(big.Int).SetString(fmt.Sprintf("%d", tm.Unix()), 10)
-				m, _ := new(big.Int).SetString(strconv.FormatInt(1e9, 10), 10)
-				unixTime.Mul(unixTime, m)
-				tmNanos, _ := new(big.Int).SetString(fmt.Sprintf("%d", tm.Nanosecond()), 10)
-				s := unixTime.Add(unixTime, tmNanos).String()
-				return &s, nil
-			case dataType.Equals(DataTypeTimestampTz):
-				_, offset := tm.Zone()
-				s := fmt.Sprintf("%v %v", tm.UnixNano(), offset/60+1440)
-				return &s, nil
+		switch typedVal := v.(type) {
+		case time.Time:
+			return timeTypeValueToString(typedVal, dataType)
+		case sql.NullTime:
+			if !typedVal.Valid {
+				return nil, nil
 			}
+			return timeTypeValueToString(typedVal.Time, dataType)
+		case sql.NullBool:
+			if !typedVal.Valid {
+				return nil, nil
+			}
+			s := strconv.FormatBool(typedVal.Bool)
+			return &s, nil
+		case sql.NullInt64:
+			if !typedVal.Valid {
+				return nil, nil
+			}
+			s := strconv.FormatInt(typedVal.Int64, 10)
+			return &s, nil
+		case sql.NullFloat64:
+			if !typedVal.Valid {
+				return nil, nil
+			}
+			s := strconv.FormatFloat(typedVal.Float64, 'g', -1, 32)
+			return &s, nil
+		case sql.NullString:
+			if !typedVal.Valid {
+				return nil, nil
+			}
+			return &typedVal.String, nil
 		}
 	}
 	return nil, fmt.Errorf("unsupported type: %v", v1.Kind())
 }
 
-func timeTypeValueToString(tm time.Time, tsmode snowflakeType) (*string, error) {
-	switch tsmode {
-	case dateType:
+func timeTypeValueToString(tm time.Time, dataType SnowflakeDataType) (*string, error) {
+	switch {
+	case dataType.Equals(DataTypeDate):
 		_, offset := tm.Zone()
 		tm = tm.Add(time.Second * time.Duration(offset))
 		s := strconv.FormatInt(tm.Unix()*1000, 10)
 		return &s, nil
-	case timeType:
+	case dataType.Equals(DataTypeTime):
 		s := fmt.Sprintf("%d",
 			(tm.Hour()*3600+tm.Minute()*60+tm.Second())*1e9+tm.Nanosecond())
 		return &s, nil
-	case timestampNtzType, timestampLtzType:
+	case dataType.Equals(DataTypeTimestampNtz) || dataType.Equals(DataTypeTimestampLtz) || dataType == nil:
+		// NOTE(greg): when the client has not given us an explicit dataType
+		// (dataType == nil), we assume DataTypeTimestampNtz for compatibility
+		// with the upstream driver
 		unixTime, _ := new(big.Int).SetString(fmt.Sprintf("%d", tm.Unix()), 10)
 		m, _ := new(big.Int).SetString(strconv.FormatInt(1e9, 10), 10)
 		unixTime.Mul(unixTime, m)
 		tmNanos, _ := new(big.Int).SetString(fmt.Sprintf("%d", tm.Nanosecond()), 10)
 		s := unixTime.Add(unixTime, tmNanos).String()
 		return &s, nil
-	case timestampTzType:
+	case dataType.Equals(DataTypeTimestampTz):
 		_, offset := tm.Zone()
 		s := fmt.Sprintf("%v %v", tm.UnixNano(), offset/60+1440)
 		return &s, nil
 	}
-	return nil, fmt.Errorf("unsupported time type: %v", tsmode)
+	return nil, fmt.Errorf("unsupported time type: %v", dataType)
 }
 
 // extractTimestamp extracts the internal timestamp data to epoch time in seconds and milliseconds
@@ -1349,18 +1358,18 @@ type TypedNullTime struct {
 	TzType timezoneType
 }
 
-func convertTzTypeToSnowflakeType(tzType timezoneType) snowflakeType {
+func convertTzTypeToSnowflakeType(tzType timezoneType) SnowflakeDataType {
 	switch tzType {
 	case TimestampNTZType:
-		return timestampNtzType
+		return DataTypeTimestampNtz
 	case TimestampLTZType:
-		return timestampLtzType
+		return DataTypeTimestampLtz
 	case TimestampTZType:
-		return timestampTzType
+		return DataTypeTimestampTz
 	case DateType:
-		return dateType
+		return DataTypeDate
 	case TimeType:
-		return timeType
+		return DataTypeTime
 	}
-	return unSupportedType
+	return nil
 }

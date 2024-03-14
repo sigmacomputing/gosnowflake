@@ -225,6 +225,10 @@ func getBindValues(bindings []driver.NamedValue) (map[string]execBindParameter, 
 			dataType = binding.Value.(SnowflakeDataType)
 		default:
 			// This binding is an actual parameter for the query
+			if tnt, ok := binding.Value.(TypedNullTime); ok {
+				dataType = convertTzTypeToSnowflakeType(tnt.TzType)
+				binding.Value = tnt.Time
+			}
 			t := goTypeToSnowflake(binding.Value, dataType)
 			var val interface{}
 			if t == sliceType {
