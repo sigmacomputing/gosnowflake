@@ -127,15 +127,15 @@ func checkMetadata(actual arrow.Metadata, expected execResponseRowType) bool {
 }
 
 // Build arrow chunk based on RowSet of base64
-func buildFirstArrowChunk(rowsetBase64 string, loc *time.Location, alloc memory.Allocator) (arrowResultChunk, error) {
+func buildFirstArrowChunk(rowsetBase64 string, loc *time.Location, alloc memory.Allocator) arrowResultChunk {
 	rowSetBytes, err := base64.StdEncoding.DecodeString(rowsetBase64)
 	if err != nil {
-		return arrowResultChunk{}, err
+		return arrowResultChunk{}
 	}
 	rr, err := ipc.NewReader(bytes.NewReader(rowSetBytes), ipc.WithAllocator(alloc))
 	if err != nil {
-		return arrowResultChunk{}, err
+		return arrowResultChunk{}
 	}
 
-	return arrowResultChunk{rr, 0, loc, alloc}, nil
+	return arrowResultChunk{rr, 0, loc, alloc}
 }

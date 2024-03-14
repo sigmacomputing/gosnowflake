@@ -109,10 +109,7 @@ func (scd *snowflakeChunkDownloader) start() error {
 		if scd.sc != nil && scd.sc.cfg != nil {
 			loc = getCurrentLocation(scd.sc.cfg.Params)
 		}
-		firstArrowChunk, err := buildFirstArrowChunk(scd.RowSet.RowSetBase64, loc, scd.pool)
-		if err != nil {
-			return err
-		}
+		firstArrowChunk := buildFirstArrowChunk(scd.RowSet.RowSetBase64, loc, scd.pool)
 		higherPrecision := higherPrecisionEnabled(scd.ctx)
 		scd.CurrentChunk, err = firstArrowChunk.decodeArrowChunk(scd.RowSet.RowType, higherPrecision)
 		scd.CurrentChunkSize = firstArrowChunk.rowCount
@@ -280,10 +277,7 @@ func (scd *snowflakeChunkDownloader) startArrowBatches() error {
 	if scd.sc != nil && scd.sc.cfg != nil {
 		loc = getCurrentLocation(scd.sc.cfg.Params)
 	}
-	firstArrowChunk, err := buildFirstArrowChunk(scd.RowSet.RowSetBase64, loc, scd.pool)
-	if err != nil {
-		return err
-	}
+	firstArrowChunk := buildFirstArrowChunk(scd.RowSet.RowSetBase64, loc, scd.pool)
 	scd.FirstBatch = &ArrowBatch{
 		idx:                0,
 		scd:                scd,
