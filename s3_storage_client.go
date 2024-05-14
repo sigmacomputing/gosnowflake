@@ -111,7 +111,7 @@ func (util *snowflakeS3Client) getFileHeader(meta *fileMetadata, filename string
 }
 
 // SNOW-974548 remove this function after upgrading AWS SDK
-func convertContentLength(contentLength any) int64 {
+func convertContentLength(contentLength interface{}) int64 {
 	switch t := contentLength.(type) {
 	case int64:
 		return t
